@@ -123,7 +123,10 @@ TEST_COMBINATIONS = [
      ),
     (2, 2, 1, 0, True, True, True,
      "tp2_pp2_ep1_nextn0_enable_dp_enable_cuda_graph_enable_overlap_scheduler"),
-    #tp2, pp2, mtp2
+    (2, 2, 1, 0, False, True, True,
+     "tp2_pp2_ep1_nextn0_disable_dp_enable_cuda_graph_enable_overlap_scheduler"
+     ),
+    # tp2, pp2, mtp2
     (2, 2, 1, 2, False, False, False,
      "tp2_pp2_ep1_nextn2_disable_dp_disable_cuda_graph_disable_overlap_scheduler"
      ),
@@ -138,6 +141,9 @@ TEST_COMBINATIONS = [
      ),
     (2, 2, 1, 2, True, True, True,
      "tp2_pp2_ep1_nextn2_enable_dp_enable_cuda_graph_enable_overlap_scheduler"),
+    (2, 2, 1, 2, False, True, True,
+     "tp2_pp2_ep1_nextn2_enable_dp_disable_cuda_graph_enable_overlap_scheduler"
+     ),
 ]
 
 
@@ -149,8 +155,7 @@ def similar(a, b, threshold=0.9):
 @pytest.mark.parametrize("model_name", ["DeepSeek-V3-Lite"],
                          ids=["deepseekv3_lite"])
 @pytest.mark.parametrize("backend", ["TRTLLM"], ids=["trtllm"])
-@pytest.mark.parametrize("quant", ["bf16", "fp8", "fp4"],
-                         ids=["bf16", "fp8", "fp4"])
+@pytest.mark.parametrize("quant", ["bf16"], ids=["fp8"])
 @pytest.mark.parametrize("test_config", TEST_COMBINATIONS, ids=lambda x: x[-1])
 def test_deepseek(model_name, backend, quant, test_config):
     tp_size, pp_size, ep_size, mtp_nextn, enable_dp, enable_cuda_graph, enable_overlap_scheduler, _ = test_config

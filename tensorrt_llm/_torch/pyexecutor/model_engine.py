@@ -878,6 +878,8 @@ class PyTorchModelEngine(ModelEngine):
 
         batch_idx = 0
 
+        from tensorrt_llm._utils import mpi_rank
+        mpi_rank()
         for request in scheduled_requests.context_requests:
             request_ids.append(request.py_request_id)
             all_prompt_tokens = request.get_tokens(0)
@@ -990,7 +992,6 @@ class PyTorchModelEngine(ModelEngine):
                 num_cached_tokens_per_seq.append(past_seen_token_num +
                                                  self.max_draft_len + 1)
                 prompt_lengths.append(request.py_prompt_len)
-
             request_ids.append(request.py_request_id)
 
         sequence_lengths.extend([1] * len(generation_requests))
@@ -1113,6 +1114,9 @@ class PyTorchModelEngine(ModelEngine):
                 dtype=torch.int,
                 pin_memory=True,
             )
+
+        # if len(request_ids) == 0:
+        #     return
 
         attn_metadata.request_ids = request_ids
         attn_metadata.prompt_lens = prompt_lengths

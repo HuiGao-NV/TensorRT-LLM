@@ -141,7 +141,8 @@ class PyExecutor:
                  max_batch_size: int = 8,
                  max_draft_tokens: int = 0,
                  kv_cache_transceiver: KvCacheTransceiver = None,
-                 draft_model_engine: Optional[ModelEngine] = None):
+                 draft_model_engine: Optional[ModelEngine] = None,
+                 start_worker: bool = True):
         super(PyExecutor, self).__init__()
         self.device_id = torch.cuda.current_device()
         self.global_rank = global_mpi_rank()
@@ -168,7 +169,8 @@ class PyExecutor:
         self.active = True
         self.next_req_id = max_batch_size  # The first max_batch_size request IDs are reserved for dummy requests
         self.max_draft_tokens = max_draft_tokens
-        self.print_log = model_engine.pytorch_backend_config.print_iter_log
+        # self.print_log = model_engine.pytorch_backend_config.print_iter_log
+        self.print_log = True
         self.enable_iter_perf_stats = model_engine.pytorch_backend_config.enable_iter_perf_stats
         self.num_fetch_requests_cur_rank = 0
         self.num_fetch_requests = 0
@@ -222,20 +224,34 @@ class PyExecutor:
         self.stats = []
         self.start_times = {}
         self.new_active_requests_queue_latency_ms = 0
+        self.dist_rsp = False
 
         self.kv_cache_transceiver = kv_cache_transceiver
         if self.dist.pp_size > 1:
-            event_loop = self._executor_loop_pp_overlap if enable_overlap_scheduler else self._executor_loop_pp
+            self.event_loop = self._executor_loop_pp_overlap if enable_overlap_scheduler else self._executor_loop_pp
         else:
-            event_loop = self._executor_loop_overlap if enable_overlap_scheduler else self._executor_loop
+            self.event_loop = self._executor_loop_overlap if enable_overlap_scheduler else self._executor_loop
 
-        if self.draft_model_engine is not None and event_loop.__name__ != self._executor_loop.__name__:
+        if self.draft_model_engine is not None and self.event_loop.__name__ != self._executor_loop.__name__:
             raise NotImplementedError(
                 "Drafting is not supported for selected executor loop. "
                 "Please disable disagg/pipeline parallelism/overlap scheduler.")
 
-        self.worker_thread = threading.Thread(target=event_loop, daemon=True)
-        self.worker_thread.start()
+        self.worker_started = False
+        self.worker_lock = threading.Lock()
+        if start_worker:
+            self.start_worker()
+
+    def start_worker(self):
+        self.worker_lock.acquire()
+        try:
+            if self.worker_started == False:
+                self.worker_thread = threading.Thread(target=self.event_loop,
+                                                      daemon=True)
+                self.worker_thread.start()
+                self.worker_started = True
+        finally:
+            self.worker_lock.release()
 
     def __enter__(self):
         return self
@@ -370,6 +386,9 @@ class PyExecutor:
             self.enqueue_lock.release()
         return req_id
 
+    def set_dist_response(self, dist_rsp):
+        self.dist_rsp = dist_rsp
+
     @contextmanager
     def _profiler(self):
         it = -1
@@ -472,6 +491,9 @@ class PyExecutor:
                             iter_start_time, iter_stats):
         iter_end_time = time.time()
         iter_latency_ms = iter_end_time - iter_start_time
+        if iter_stats is None:
+            return
+
         self._append_iter_stats(
             self._update_iter_stats(iter_stats, iter_latency_ms,
                                     len(finished_requests), scheduled_batch))
@@ -723,7 +745,6 @@ class PyExecutor:
                     new_requests) or got_finish_signal
                 if got_finish_signal and len(self.active_requests) == 0:
                     break
-
                 if self.enable_iter_perf_stats:
                     iter_stats = self._get_init_iter_stats(
                         len(new_requests),
@@ -1095,6 +1116,7 @@ class PyExecutor:
              self.dist.tp_size - 1) // self.dist.tp_size,
             max(self.all_ranks_num_active_requests),
         )
+
         self.has_context_request = False
         new_requests_cur_rank = []
         if new_requests != [] and new_requests[
@@ -1762,21 +1784,26 @@ class PyExecutor:
 
     @nvtx_range("_enqueue_responses")
     def _enqueue_responses(self, responses: Dict[int, ExecutorResponse]):
-        if 0 not in self.dist.mapping.tp_group:
+        if 0 not in self.dist.mapping.tp_group and not self.dist_rsp:
             return
 
         logger.debug(
             f'before gather, rank = {self.dist.rank}, responses = {responses}')
         if self.enable_attention_dp:
-            responses_list = self.dist.tp_gather(responses)
-            if self.dist.rank == 0:
+            if not self.dist_rsp:
+                responses_list = self.dist.tp_gather(responses)
+            else:
+                responses_list = self.dist.allgather(responses)
+            if self.dist.rank == 0 or self.dist_rsp:
                 gather_responses = {}
-                for resp in responses_list:
-                    gather_responses.update(resp)
-                responses = gather_responses
+                if responses_list is not None:
+                    for resp in responses_list:
+                        gather_responses.update(resp)
+                    responses = gather_responses
         logger.debug(
             f'after gather, rank = {self.dist.rank}, responses = {responses}')
-        if self.dist.rank == 0:
+
+        if self.dist.rank == 0 or self.dist_rsp:
             with self.response_cv:
                 for req_id, resp in responses.items():
                     if req_id in self.responses.keys():
@@ -1793,9 +1820,12 @@ class PyExecutor:
         logger.debug(
             f'------before _handle_responses, rank = {self.dist.rank}, output = {self.active_requests}'
         )
+        from tensorrt_llm._utils import mpi_rank
+        rank = mpi_rank()
         for request in self.active_requests:
             req_id = request.py_request_id
             #no responses for dummy request, and finish it
+
             if request.is_dummy == True:
                 requests_to_terminate.append(request)
                 continue
@@ -1804,7 +1834,6 @@ class PyExecutor:
             request.decoding_iter = request.py_decoding_iter
             response = request.create_response(False, self.dist.rank)
             request_done = False
-
             if response:
                 request_done = response.result.is_final
                 new_responses.update({req_id: response})
@@ -1819,7 +1848,6 @@ class PyExecutor:
         self._enqueue_responses(new_responses)
         for request in requests_to_terminate:
             self._terminate_request(request)
-
         return requests_to_terminate
 
     @nvtx_range("_terminate_ctx_finished_requests")
