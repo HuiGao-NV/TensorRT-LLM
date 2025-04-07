@@ -169,8 +169,7 @@ class PyExecutor:
         self.active = True
         self.next_req_id = max_batch_size  # The first max_batch_size request IDs are reserved for dummy requests
         self.max_draft_tokens = max_draft_tokens
-        # self.print_log = model_engine.pytorch_backend_config.print_iter_log
-        self.print_log = True
+        self.print_log = model_engine.pytorch_backend_config.print_iter_log
         self.enable_iter_perf_stats = model_engine.pytorch_backend_config.enable_iter_perf_stats
         self.num_fetch_requests_cur_rank = 0
         self.num_fetch_requests = 0
@@ -1820,8 +1819,6 @@ class PyExecutor:
         logger.debug(
             f'------before _handle_responses, rank = {self.dist.rank}, output = {self.active_requests}'
         )
-        from tensorrt_llm._utils import mpi_rank
-        rank = mpi_rank()
         for request in self.active_requests:
             req_id = request.py_request_id
             #no responses for dummy request, and finish it

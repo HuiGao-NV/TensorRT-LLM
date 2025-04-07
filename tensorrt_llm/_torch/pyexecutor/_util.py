@@ -1,3 +1,4 @@
+import math
 import random
 from collections.abc import Iterable
 
@@ -6,10 +7,8 @@ import torch
 import tensorrt_llm
 import tensorrt_llm.bindings as tllm
 import tensorrt_llm.bindings.executor as trtllm
-from tensorrt_llm._torch.pyexecutor.kv_cache_transceiver import (
-    AttentionTypeCpp, create_kv_cache_transceiver)
-from tensorrt_llm._utils import (mpi_allgather, str_dtype_to_binding,
-                                 torch_dtype_to_str)
+from tensorrt_llm._utils import (mpi_allgather, mpi_broadcast,
+                                 str_dtype_to_binding, torch_dtype_to_str)
 from tensorrt_llm.bindings.executor import ExecutorConfig
 from tensorrt_llm.logger import logger
 from tensorrt_llm.mapping import Mapping
@@ -18,7 +17,6 @@ from ..speculative import (get_num_spec_layers, get_spec_decoder,
                            get_spec_resource_manager)
 from .decoder import (EarlyStopDecoder, TorchDecoder, TorchStarAttentionDecoder,
                       TRTLLMDecoder)
-from .distributed import MPIDist
 from .guided_decoder import GuidedDecoderResourceManager
 from .kv_cache_transceiver import AttentionTypeCpp, create_kv_cache_transceiver
 from .model_engine import (DRAFT_KV_CACHE_MANAGER_KEY, KV_CACHE_MANAGER_KEY,
@@ -92,7 +90,6 @@ def create_dummy_context_requests(max_num_tokens: int, max_seq_len: int,
                                   vocab_size: int):
     requests = []
     max_seq_len = min(max_num_tokens, max_seq_len)
-    import math
     batch_size = math.ceil(max_num_tokens / max_seq_len)
     for idx in range(batch_size):
         input_tokens = [
@@ -102,8 +99,7 @@ def create_dummy_context_requests(max_num_tokens: int, max_seq_len: int,
         request = trtllm.Request(input_tokens,
                                  max_tokens=1,
                                  streaming=False,
-                                 sampling_config=trtllm.SamplingConfig(
-                                     1, num_return_sequences=1),
+                                 sampling_config=trtllm.SamplingConfig(),
                                  output_config=output_config,
                                  end_id=-1)
         requests.append(request)
@@ -127,27 +123,15 @@ def estimate_max_kv_cache_tokens(py_executor: PyExecutor,
                                  draft_model_engine: PyTorchModelEngine):
     # TODO: support CP by generating dummy requests for it.
     if 'cp_type' in mapping.cp_config:
-        return
+        return executor_config.max_num_tokens
+
     vocab_size = model_engine.model.model_config.pretrained_config.vocab_size
     max_num_tokens = executor_config.max_num_tokens
     fraction = executor_config.kv_cache_config.free_gpu_memory_fraction
     kv_cache_max_tokens_in = executor_config.kv_cache_config.max_tokens
-    pytorch_backend_config = executor_config.pytorch_backend_config
 
-<<<<<<< HEAD
-        req = create_dummy_context_request(max_num_tokens, max_seq_len,
-                                           vocab_size)
-        resource_manager.prepare_resources(req)
-        model_engine.forward(req, resource_manager, is_dummy_forward=True)
-        torch.cuda.synchronize()
-        # Get the torch-managed peak memory
-        torch_peak_memory = torch.cuda.memory_stats(
-        )["allocated_bytes.all.peak"]
-=======
-    end, total_gpu_memory = torch.cuda.mem_get_info()
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
->>>>>>> 6e4bf681 (Run PyExecutor's inference flow to estimate max_num_tokens for kv_cache_manager)
 
     py_executor.set_dist_response(True)
     origin_iter_stats = py_executor.enable_iter_perf_stats
@@ -157,13 +141,10 @@ def estimate_max_kv_cache_tokens(py_executor: PyExecutor,
         req = create_dummy_context_requests(max_num_tokens, origin_seq_len,
                                             vocab_size)
         req_ids = py_executor.enqueue_requests(req)
-    all_ids = py_executor.dist.allgather(req_ids)
-    req_ids = [req_id for ids in all_ids for req_id in ids]
+    req_ids = mpi_broadcast(req_ids, root=0)
     py_executor.start_worker()
     py_executor.await_responses(req_ids)
     mpi_allgather(0)
-
-    torch.cuda.synchronize()
 
     torch_peak_memory = torch.cuda.memory_stats()["allocated_bytes.all.peak"]
 
@@ -175,14 +156,12 @@ def estimate_max_kv_cache_tokens(py_executor: PyExecutor,
     extra_cost = max(total_used_bytes - torch_used_bytes, 0)
     peak_memory = torch_peak_memory + extra_cost
     logger.info(
-        f"Memory used outside torch in memory usage profiling: {extra_cost / (1<<30):.2f} GiB"
+        f"Memory used outside torch in memory usage profiling: {extra_cost / (GB):.2f} GiB"
     )
     kv_stats = py_executor.resource_manager.resource_managers.get(
         "kv_cache_manager").get_kv_cache_stats()
 
     kv_occupied_blocks = kv_stats.max_num_blocks
-    from tensorrt_llm._utils import mpi_rank
-    mpi_rank()
     kv_cache_max_tokens = cal_max_tokens(
         peak_memory, total_gpu_memory, fraction,
         model_engine.model.model_config, mapping,
@@ -196,34 +175,14 @@ def estimate_max_kv_cache_tokens(py_executor: PyExecutor,
     py_executor.set_dist_response(False)
     py_executor.enable_iter_perf_stats = origin_iter_stats
 
-    if kv_cache_max_tokens_in == kv_cache_max_tokens:
-        return py_executor
-
-    # return py_executor
     py_executor.resource_manager.resource_managers.get(
         "kv_cache_manager").shutdown()
+
     py_executor.shutdown()
+    # sync all ranks after creating new pyExecutor
+    mpi_allgather(0)
 
-    executor_config.kv_cache_config.max_tokens = kv_cache_max_tokens
-
-    kv_cache_manager = create_kv_cache_manager(model_engine, mapping,
-                                               executor_config)
-
-    if model_engine.attn_metadata is not None and kv_cache_manager is not None:
-        model_engine.attn_metadata.kv_cache_manager = kv_cache_manager
-
-    draft_kv_cache_manager = create_kv_cache_manager(
-        draft_model_engine, mapping,
-        executor_config) if draft_model_engine is not None else None
-    dist = MPIDist(mapping=mapping)
-
-    py_executor = instance_py_executor(dist, kv_cache_manager,
-                                       draft_kv_cache_manager, mapping,
-                                       pytorch_backend_config, executor_config,
-                                       ctx_chunk_config, model_engine,
-                                       draft_model_engine, True,
-                                       py_executor.kv_cache_transceiver)
-    return py_executor
+    return kv_cache_max_tokens
 
 
 def create_kv_cache_manager(model_engine: PyTorchModelEngine, mapping: Mapping,
@@ -293,17 +252,17 @@ def create_kv_cache_manager(model_engine: PyTorchModelEngine, mapping: Mapping,
         return None
 
 
-def instance_py_executor(dist,
-                         kv_cache_manager,
-                         draft_kv_cache_manager,
-                         mapping,
-                         pytorch_backend_config,
-                         executor_config,
-                         ctx_chunk_config,
-                         model_engine,
-                         draft_model_engine,
-                         start_worker,
-                         kv_cache_transceiver=None):
+def create_py_executor_instance(dist,
+                                kv_cache_manager,
+                                draft_kv_cache_manager,
+                                mapping,
+                                pytorch_backend_config,
+                                executor_config,
+                                ctx_chunk_config,
+                                model_engine,
+                                draft_model_engine,
+                                start_worker,
+                                kv_cache_transceiver=None):
     spec_config = model_engine.spec_config
     resources = {
         KV_CACHE_MANAGER_KEY: kv_cache_manager

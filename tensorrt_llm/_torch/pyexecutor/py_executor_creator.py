@@ -8,8 +8,8 @@ from tensorrt_llm.mapping import Mapping
 
 from ..attention_backend.interface import AttentionRuntimeFeatures
 from ..speculative import Eagle3Config
-from ._util import (create_kv_cache_manager, estimate_max_kv_cache_tokens,
-                    instance_py_executor, is_mla)
+from ._util import (create_kv_cache_manager, create_py_executor_instance,
+                    estimate_max_kv_cache_tokens, is_mla)
 from .config import PyTorchConfig
 from .distributed import MPIDist
 from .model_engine import DRAFT_KV_CACHE_MANAGER_KEY, PyTorchModelEngine
@@ -150,17 +150,35 @@ def create_py_executor(executor_config: ExecutorConfig,
     if kv_cache_manager is not None:
         executor_config.max_seq_len = kv_cache_manager.max_seq_len
 
-    py_executor = instance_py_executor(dist, kv_cache_manager,
-                                       draft_kv_cache_manager, mapping,
-                                       pytorch_backend_config, executor_config,
-                                       ctx_chunk_config, model_engine,
-                                       draft_model_engine, False)
+    py_executor = create_py_executor_instance(dist, kv_cache_manager,
+                                              draft_kv_cache_manager, mapping,
+                                              pytorch_backend_config,
+                                              executor_config, ctx_chunk_config,
+                                              model_engine, draft_model_engine,
+                                              False)
 
     if executor_config.pytorch_backend_config.use_kv_cache:
-        py_executor = estimate_max_kv_cache_tokens(py_executor, model_engine,
-                                                   origin_executor_config,
-                                                   mapping, origin_seq_len,
-                                                   ctx_chunk_config,
-                                                   draft_model_engine)
+        kv_cache_max_tokens = estimate_max_kv_cache_tokens(
+            py_executor, model_engine, origin_executor_config, mapping,
+            origin_seq_len, ctx_chunk_config, draft_model_engine)
+        # This may be None if no max number tokens set and enable cp.
+        if kv_cache_max_tokens is not None:
+            executor_config.kv_cache_config.max_tokens = kv_cache_max_tokens
+
+            kv_cache_manager = create_kv_cache_manager(model_engine, mapping,
+                                                       executor_config)
+
+            if model_engine.attn_metadata is not None and kv_cache_manager is not None:
+                model_engine.attn_metadata.kv_cache_manager = kv_cache_manager
+
+            draft_kv_cache_manager = create_kv_cache_manager(
+                draft_model_engine, mapping,
+                executor_config) if draft_model_engine is not None else None
+
+            py_executor = create_py_executor_instance(
+                dist, kv_cache_manager, draft_kv_cache_manager, mapping,
+                pytorch_backend_config, executor_config, ctx_chunk_config,
+                model_engine, draft_model_engine, True,
+                py_executor.kv_cache_transceiver)
 
     return py_executor
