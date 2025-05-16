@@ -41,8 +41,12 @@ class BaseQuant:
     def load_weight(self, weights, tensor_name):
         raise "load_weight is not implemented."
 
+    def load_weights_custormized(self, weights, loader, **kwargs):
+        raise "load_weights_custormized is not implemented."
+
     def _copy(self, dst: Parameter, src: torch.Tensor):
         # TODO check that is it a reasonable change or not
+        #print(f"============================== {dst}      {src}")
         if dst.dtype != src.dtype:
             src = src.to(dst.dtype)
         assert dst.dtype == src.dtype, f"Incompatible dtype. dst: {dst.dtype}, src: {src.dtype}"
@@ -63,6 +67,14 @@ class NoopQuant(BaseQuant):
 
     def load_weight(self, weights, tensor_name):
         scale = self._load_weight_for_name(weights, tensor_name)
+        if scale is None:
+            self.scale = None
+            return
+        self._copy(self.scale, scale)
+        self.inv_scale.data = 1.0 / self.scale
+
+    def load_weights_custormized(self, weights, loader, **kwargs):
+        scale = loader(weights)
         self._copy(self.scale, scale)
         self.inv_scale.data = 1.0 / self.scale
 
@@ -83,6 +95,8 @@ class QDQ(BaseQuant):
                                    requires_grad=False)
 
     def __call__(self, input):
+        if self.scale is None:
+            return input, self.scale
         if input.dtype != torch.float8_e4m3fn:
             qinput, _ = torch.ops.tensorrt_llm.static_quantize_e4m3_per_tensor(
                 input, self.scale)
@@ -92,8 +106,14 @@ class QDQ(BaseQuant):
 
     def load_weight(self, weights, tensor_name):
         scale = self._load_weight_for_name(weights, tensor_name)
+        if scale is None:
+            self.scale = None
+            return
         self._copy(self.scale, scale)
         self.inv_scale.data = 1.0 / self.scale
+
+    def load_weights_custormized(self, weights, loader, **kwargs):
+        self.scale, self.inv_scale = loader(weights)
 
 
 class BlockScalesQuant(BaseQuant):
@@ -110,6 +130,8 @@ class BlockScalesQuant(BaseQuant):
                                    requires_grad=False)
 
     def __call__(self, input):
+        if self.scale is None:
+            return input, self.scale
         if input.dtype == torch.float8_e4m3fn:
             input = input.to(torch.bfloat16) * self.scale
         assert input.dtype == torch.bfloat16
@@ -117,9 +139,16 @@ class BlockScalesQuant(BaseQuant):
         return torch.ops.trtllm.fp8_quantize_1x128(input)
 
     def load_weight(self, weights, tensor_name):
+        # print(f"========================== tensor_name: {tensor_name}")
         scale = self._load_weight_for_name(weights, tensor_name)
+        if scale is None:
+            self.scale = None
+            return
         self._copy(self.scale, scale)
         self.inv_scale.data = 1.0 / self.scale
+
+    def load_weights_custormized(self, weights, loader, **kwargs):
+        self.scale, self.inv_scale = loader(weights)
 
 
 class NVFP4(BaseQuant):
@@ -137,21 +166,32 @@ class NVFP4(BaseQuant):
                                                 dtype=torch.float32,
                                                 device=self.device),
                                    requires_grad=False)
+        
+        self.scale_factor_use_ue8m0 = False
+        self.is_scale_factor_swizzled = False
 
     def __call__(self, input):
+        if self.scale is None:
+            return input, self.scale
         if isinstance(input, Fp4QuantizedTensor):
             return input.fp4_tensor, input.scaling_factor
         else:
             return torch.ops.trtllm.fp4_quantize(input, self.scale,
                                                  self.scaling_vector_size,
-                                                 False)
+                                                 self.scale_factor_use_ue8m0,
+                                                self.is_scale_factor_swizzled)
 
     def load_weight(self, weights, tensor_name):
         scale = self._load_weight_for_name(weights, tensor_name)
-
+        if scale is None:
+            self.scale = None
+            return
         scale = 1.0 / scale
         self._copy(self.scale, scale)
         self.inv_scale.data = self.scale / E2M1_MAX
+
+    def load_weights_custormized(self, weights, loader, **kwargs):
+        self.scale, self.inv_scale = loader(weights, kwargs)
 
 
 class LinearQuant:
@@ -175,7 +215,7 @@ class LinearQuant:
 class MoeQuant:
 
     @staticmethod
-    def create_quantizer(quant_config, device):
+    def create_quantizer(quant_config, device, backend):
         quant_mode = quant_config.layer_quant_mode if quant_config else None
         quant = None
         # TODO: need to make src/target dtype to be parameters.
@@ -185,6 +225,9 @@ class MoeQuant:
             elif quant_mode.has_nvfp4():
                 quant = NVFP4(quant_config, device)
             elif quant_mode.has_fp8_block_scales():
-                quant = NoopQuant(quant_config, device)
+                if backend == "trtllm_gen":
+                    quant = BlockScalesQuant(quant_config, device)
+                else:
+                    quant = NoopQuant(quant_config, device)
 
         return quant
