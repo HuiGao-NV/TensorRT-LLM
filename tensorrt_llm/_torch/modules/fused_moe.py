@@ -42,7 +42,6 @@ def load_nvfp4_scales(quantizer, weights: Dict, num_experts, is_trtllm, fc31_alp
         w1_input_scale = weights[f"{expert_id}.w1.input_scale"]
         w3_input_scale = weights[f"{expert_id}.w3.input_scale"]
         w2_input_scale = weights[f"{expert_id}.w2.input_scale"]
-
         tmp_fc31_input_scale[expert_id].copy_(w1_input_scale[...].reshape([]))
         tmp_fc2_input_scale[expert_id].copy_(w2_input_scale[...].reshape([]))
 
@@ -490,6 +489,7 @@ class FusedMoE(nn.Module):
                 proj_weight_scales=self.w2_weight_scaling_factor,
             )
         elif self.has_nvfp4:
+            print(f"=========================== setup_quant_scales {self.input_quantizer.scale}")
             self.quant_scales = FusedMoEQuantScalesNVFP4(
                 fc1_act_global=self.input_quantizer.scale,
                 fc1_weight_block=self.w3_w1_weight_scale,
@@ -798,7 +798,6 @@ class FusedMoE(nn.Module):
         x_sf = None
         if self.has_any_quant:
             x, x_sf = self.input_quantizer(x)
-        # print(f"============ {x}       {x_sf}       {self.input_quantizer}")
 
         if self.use_dp and self.parallel_size > 1 and not disable_fp4_allgather(
         ) and not self.enable_alltoall:
@@ -847,7 +846,7 @@ class FusedMoE(nn.Module):
             x, x_sf = self.alltoall_postquant_dispatch(x, x_sf, x_row, x_col,
                                                        alltoall_info)
 
-        print(f"============================================== {quant_scales}")
+        print(f"========================= forward chunk: {type(quant_scales)}")
         final_hidden_states = torch.ops.trtllm.fused_moe(
             x,
             token_selected_experts,
@@ -893,6 +892,7 @@ class FusedMoE(nn.Module):
         """
         cutlass_min_latency_mode has no effect when trtllm_gen backend is enabled.
         """
+        print(f"============================== fused moe")
         if self.is_cutlass():
             return self.forward_cutlass(x, router_logits,
                                         cutlass_min_latency_mode, output_dtype,
@@ -903,7 +903,6 @@ class FusedMoE(nn.Module):
             raise NotImplementedError(
                 f"FusedMoE only supports CUTLASS or TRTLLM backends, not {self.moe_backend}"
             )
-        print(f"============================== fused moe")
 
     def forward_cutlass(
         self,
@@ -1523,9 +1522,8 @@ class FusedMoE(nn.Module):
             load_expert_fc2_alpha_nvfp4(w2_weight_scale_2,
                                         self.fc2_input_scale.data,
                                         self.fc2_alpha.data[expert_idx])
-        
-        load_nvfp4_scales(self.input_quantizer, weights, self.num_experts, self.is_trtllm(), self.fc31_alpha)
-
+        self.input_quantizer.load_weights_custormized(weights, load_nvfp4_scales, num_experts = self.num_experts, is_trtllm = self.is_trtllm(), fc31_alpha = self.fc31_alpha)
+        # load_nvfp4_scales(weights, self.num_experts, self.is_trtllm(), self.fc31_alpha)
 
 class FusedMoEQuantScalesFP8(NamedTuple):
     fc1_dequant: torch.Tensor

@@ -408,7 +408,6 @@ class Linear(nn.Module):
                 output = allgather(output, self.mapping)
         else:
             output = self.apply_linear(input, self.bias, lora_params, layer_idx)
-        # print(f"============================== linear")
         return output
 
     def load_weights(self, weights: List[Dict]):

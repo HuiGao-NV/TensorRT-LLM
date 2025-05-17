@@ -672,6 +672,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
             **kwargs,
         )
 
+        print(f"============================= forward layer: {self.layer_idx}")
         if isinstance(self.mlp, Deepseekv3MoE):
             return self.forward_MoE(
                 hidden_states=hidden_states,
@@ -797,6 +798,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
             hidden_states, residual = self.post_attention_layernorm(
                 hidden_states, residual)
 
+        print(f"==================== forward mlp")
         hidden_states = self.mlp(
             hidden_states,
             final_all_reduce_params=AllReduceParams(enable_allreduce=not (

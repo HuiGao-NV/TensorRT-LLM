@@ -46,7 +46,6 @@ class BaseQuant:
 
     def _copy(self, dst: Parameter, src: torch.Tensor):
         # TODO check that is it a reasonable change or not
-        #print(f"============================== {dst}      {src}")
         if dst.dtype != src.dtype:
             src = src.to(dst.dtype)
         assert dst.dtype == src.dtype, f"Incompatible dtype. dst: {dst.dtype}, src: {src.dtype}"
@@ -139,7 +138,6 @@ class BlockScalesQuant(BaseQuant):
         return torch.ops.trtllm.fp8_quantize_1x128(input)
 
     def load_weight(self, weights, tensor_name):
-        # print(f"========================== tensor_name: {tensor_name}")
         scale = self._load_weight_for_name(weights, tensor_name)
         if scale is None:
             self.scale = None
@@ -158,11 +156,11 @@ class NVFP4(BaseQuant):
         self.scaling_vector_size = 16
 
         # FP32 per-tensor global scaling factor = 448*6/amax_input
-        self.scale = Parameter(torch.tensor([1],
+        self.scale = Parameter(torch.tensor(1,
                                             dtype=torch.float32,
                                             device=self.device),
                                requires_grad=False)
-        self.inv_scale = Parameter(torch.tensor([1],
+        self.inv_scale = Parameter(torch.tensor(1,
                                                 dtype=torch.float32,
                                                 device=self.device),
                                    requires_grad=False)
@@ -191,7 +189,9 @@ class NVFP4(BaseQuant):
         self.inv_scale.data = self.scale / E2M1_MAX
 
     def load_weights_custormized(self, weights, loader, **kwargs):
-        self.scale, self.inv_scale = loader(weights, kwargs)
+        self.scale, self.inv_scale = loader(self, weights, **kwargs)
+        self.scale = self.scale.to(self.device)
+        self.inv_scale = self.inv_scale.to(self.device)
 
 
 class LinearQuant:
