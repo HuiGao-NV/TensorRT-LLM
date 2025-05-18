@@ -658,6 +658,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
         residual: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
+        print(f"============================= forward layer: {self.layer_idx}   {hidden_states}")
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -672,7 +673,8 @@ class DeepseekV3DecoderLayer(DecoderLayer):
             **kwargs,
         )
 
-        print(f"============================= forward layer: {self.layer_idx}")
+        print(f"============================= forward layer 1: {self.layer_idx}  {hidden_states}")
+
         if isinstance(self.mlp, Deepseekv3MoE):
             return self.forward_MoE(
                 hidden_states=hidden_states,
@@ -685,6 +687,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
                 hidden_states=hidden_states,
                 residual=residual,
             )
+        print(f"============================= forward layer 1: {self.layer_idx}  {hidden_states}")
 
     def forward_MoE(
         self,

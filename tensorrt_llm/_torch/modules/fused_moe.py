@@ -33,7 +33,7 @@ def load_fp8_block_scales_scales(quantizer, weights: Dict, expert_start, expert_
     pass
 
 
-def load_nvfp4_scales(quantizer, weights: Dict, num_experts, is_trtllm, fc31_alpha):
+def load_nvfp4_scales(quantizer, weights: Dict, num_experts, is_trtllm):
     # Step1: Load input scales.
     tmp_fc31_input_scale = torch.empty(num_experts,
                                        dtype=torch.float32)
@@ -56,10 +56,6 @@ def load_nvfp4_scales(quantizer, weights: Dict, num_experts, is_trtllm, fc31_alp
     else:
         block_scales_dtype = FUSED_MOE_NVFP4_WEIGHT_BLOCK_SCALE_DTYPE
     quantizer.block_scales_dtype = block_scales_dtype
-
-    if is_trtllm:
-        fc31_scale_c = fc2_input_scale * fc31_alpha
-        return fc31_scale_c, fc2_input_scale
 
     return fc31_input_scale, fc2_input_scale
 
@@ -489,12 +485,11 @@ class FusedMoE(nn.Module):
                 proj_weight_scales=self.w2_weight_scaling_factor,
             )
         elif self.has_nvfp4:
-            print(f"=========================== setup_quant_scales {self.input_quantizer.scale}")
             self.quant_scales = FusedMoEQuantScalesNVFP4(
                 fc1_act_global=self.input_quantizer.scale,
                 fc1_weight_block=self.w3_w1_weight_scale,
                 fc1_global=self.fc31_alpha,
-                fc2_act_global=self.fc2_input_scale,
+                fc2_act_global=self.input_quantizer.inv_scale,
                 fc2_weight_block=self.w2_weight_scale,
                 fc2_global=self.fc2_alpha,
             )
@@ -798,6 +793,13 @@ class FusedMoE(nn.Module):
         x_sf = None
         if self.has_any_quant:
             x, x_sf = self.input_quantizer(x)
+            if isinstance(x, Fp4QuantizedTensor):
+                x_row = x.shape[0]
+                # note: we use uint8 to store 2 fp4 values
+                x_col = x.shape[1] * 2
+            else:
+                x_row = x.shape[0]
+                x_col = x.shape[1]
 
         if self.use_dp and self.parallel_size > 1 and not disable_fp4_allgather(
         ) and not self.enable_alltoall:
@@ -846,7 +848,7 @@ class FusedMoE(nn.Module):
             x, x_sf = self.alltoall_postquant_dispatch(x, x_sf, x_row, x_col,
                                                        alltoall_info)
 
-        print(f"========================= forward chunk: {type(quant_scales)}")
+        print(f"======================================= forward_chunk: {x}  {quant_scales}")
         final_hidden_states = torch.ops.trtllm.fused_moe(
             x,
             token_selected_experts,
@@ -1400,6 +1402,8 @@ class FusedMoE(nn.Module):
         else:
             block_scales_dtype = FUSED_MOE_NVFP4_WEIGHT_BLOCK_SCALE_DTYPE
 
+        self.input_quantizer.load_weights_custormized(weights, load_nvfp4_scales, num_experts = self.num_experts, is_trtllm = self.is_trtllm())
+
         # Step2: Load weight block scales and alphas.
         def load_expert_w3_w1_weight_scale_nvfp4(
                 w1_weight_scale, w3_weight_scale,
@@ -1517,13 +1521,15 @@ class FusedMoE(nn.Module):
                 self.is_trtllm())
 
             load_expert_fc31_alpha_nvfp4(w1_weight_scale_2, w3_weight_scale_2,
-                                         self.fc31_input_scale.data,
+                                         self.input_quantizer.scale.data,
                                          self.fc31_alpha.data[expert_idx])
             load_expert_fc2_alpha_nvfp4(w2_weight_scale_2,
-                                        self.fc2_input_scale.data,
+                                        self.input_quantizer.inv_scale.data,
                                         self.fc2_alpha.data[expert_idx])
-        self.input_quantizer.load_weights_custormized(weights, load_nvfp4_scales, num_experts = self.num_experts, is_trtllm = self.is_trtllm(), fc31_alpha = self.fc31_alpha)
-        # load_nvfp4_scales(weights, self.num_experts, self.is_trtllm(), self.fc31_alpha)
+
+        if self.is_trtllm():
+            self.fc31_scale_c.data.copy_(self.input_quantizer.fc2_input_scale.data *
+                                         self.fc31_alpha.data)
 
 class FusedMoEQuantScalesFP8(NamedTuple):
     fc1_dequant: torch.Tensor
