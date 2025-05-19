@@ -117,12 +117,15 @@ class GatedMLP(nn.Module):
                                      final_all_reduce_params, lora_params)
 
         if self.activation == F.silu:
+            # print(f"======================= rank  {self.mapping.rank} GatedMLP 1: {x}") if self.mapping.rank == 0 else None
             h1 = self.gate_up_proj(x)
-
+            # print(f"======================= rank  {self.mapping.rank} GatedMLP 2: {h1}") if self.mapping.rank == 0 else None
             h2 = swiglu(h1)
+            # print(f"======================= rank  {self.mapping.rank} GatedMLP 3: {h2}") if self.mapping.rank == 0 else None
             output = self.down_proj(h2,
                                     all_reduce_params=final_all_reduce_params,
                                     layer_idx=self.layer_idx)
+            # print(f"======================= rank  {self.mapping.rank} GatedMLP 4: {output}") if self.mapping.rank == 0 else None
             return output
         else:
             raise NotImplementedError(

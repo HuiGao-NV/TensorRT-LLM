@@ -848,7 +848,7 @@ class FusedMoE(nn.Module):
             x, x_sf = self.alltoall_postquant_dispatch(x, x_sf, x_row, x_col,
                                                        alltoall_info)
 
-        print(f"======================================= forward_chunk: {x}  {quant_scales}")
+        # print(f"======================================= rank  {self.mapping.rank} forward_chunk: {x}  {quant_scales}") if self.mapping.rank == 0 else None
         final_hidden_states = torch.ops.trtllm.fused_moe(
             x,
             token_selected_experts,
@@ -894,7 +894,7 @@ class FusedMoE(nn.Module):
         """
         cutlass_min_latency_mode has no effect when trtllm_gen backend is enabled.
         """
-        print(f"============================== fused moe")
+        # print(f"============================== rank  {self.mapping.rank} fused moe") if self.mapping.rank == 0 else None
         if self.is_cutlass():
             return self.forward_cutlass(x, router_logits,
                                         cutlass_min_latency_mode, output_dtype,

@@ -151,7 +151,7 @@ class BlockScalesQuant(BaseQuant):
 
 class NVFP4(BaseQuant):
 
-    def __init__(self, quant_config, device):
+    def __init__(self, quant_config, device, **kwargs):
         super().__init__(quant_config, device)
         self.scaling_vector_size = 16
 
@@ -166,7 +166,7 @@ class NVFP4(BaseQuant):
                                    requires_grad=False)
         
         self.scale_factor_use_ue8m0 = False
-        self.is_scale_factor_swizzled = False
+        self.is_scale_factor_swizzled = kwargs["is_scale_factor_swizzled"] if "is_scale_factor_swizzled" in kwargs else None
 
     def __call__(self, input):
         if self.scale is None:
@@ -174,10 +174,11 @@ class NVFP4(BaseQuant):
         if isinstance(input, Fp4QuantizedTensor):
             return input.fp4_tensor, input.scaling_factor
         else:
+            # # print(f"================================= NVFP4: {input.shape}   {self.scale.shape}    {self.scaling_vector_size}   {self.scale_factor_use_ue8m0}    {self.is_scale_factor_swizzled}")
             return torch.ops.trtllm.fp4_quantize(input, self.scale,
                                                  self.scaling_vector_size,
                                                  self.scale_factor_use_ue8m0,
-                                                self.is_scale_factor_swizzled)
+                                                 True)
 
     def load_weight(self, weights, tensor_name):
         scale = self._load_weight_for_name(weights, tensor_name)
@@ -223,7 +224,7 @@ class MoeQuant:
             if quant_mode.has_fp8_qdq():
                 quant = QDQ(quant_config, device)
             elif quant_mode.has_nvfp4():
-                quant = NVFP4(quant_config, device)
+                quant = NVFP4(quant_config, device, is_scale_factor_swizzled = False)
             elif quant_mode.has_fp8_block_scales():
                 if backend == "trtllm_gen":
                     quant = BlockScalesQuant(quant_config, device)

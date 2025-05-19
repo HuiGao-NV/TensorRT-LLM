@@ -299,6 +299,7 @@ class Linear(nn.Module):
 
     def _apply_linear_fp8_qdq(self, input, input_scale, bias):
         # This op does not support bias now.
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear_fp8_qdq 1: {input}  {input_scale}   {bias}") if self.mapping.rank == 0 else None
         output = torch.ops.trtllm.cublas_scaled_mm(
             input,
             self.weight.t(),
@@ -307,21 +308,28 @@ class Linear(nn.Module):
             bias=None,
             out_dtype=self.dtype or input.dtype,
         )
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear_fp8_qdq 2: {output}") if self.mapping.rank == 0 else None
         if bias is not None:
             output = output + bias
         return output
 
     def _apply_linear_fp8_block_scale(self, act_input, input_scale, bias):
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear_fp8_block_scale 1: {act_input}  {input_scale}   {bias}") if self.mapping.rank == 0 else None
         output = torch.ops.trtllm.fp8_block_scaling_gemm(
             act_input, self.weight, input_scale, self.weight_scale)
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear_fp8_block_scale 2: {output}") if self.mapping.rank == 0 else None
         if bias is not None:
             output = output + bias
         return output
 
     def _apply_linear_nvfp4(self, act_input, input_scale, bias):
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear_nvfp4 1: {act_input}  {input_scale}   {bias}") if self.mapping.rank == 0 else None
         output = torch.ops.trtllm.nvfp4_gemm(act_input, self.weight,
                                              input_scale, self.weight_scale,
                                              self.alpha, False, self.dtype)
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear_nvfp4 2: {output}") if self.mapping.rank == 0 else None
+        # import traceback
+        # traceback.print_stack()
         if bias is not None:
             output = output + bias
 
@@ -333,13 +341,16 @@ class Linear(nn.Module):
             f'unsupported quant mode: {self.quant_config.quant_mode}')
 
     def _apply_linear(self, act_input, input_scale, bias):
+        # print(f"=============================== rank  {self.mapping.rank} _apply_linear 1: {act_input}  {input_scale}   {bias}") if self.mapping.rank == 0 else None
         if self.use_custom_cublas_mm:
             output = torch.ops.trtllm.cublas_mm(act_input,
                                                 self.weight.t(),
                                                 bias,
                                                 out_dtype=None)
+            # print(f"=============================== rank  {self.mapping.rank} _apply_linear 2: {output}") if self.mapping.rank == 0 else None
         else:
             output = F.linear(act_input, self.weight, bias)
+            # print(f"=============================== rank  {self.mapping.rank} _apply_linear 3: {output}") if self.mapping.rank == 0 else None
         return output
 
     def apply_linear(self,
@@ -350,10 +361,15 @@ class Linear(nn.Module):
         act_input = input
         input_scale = None
         if self._has_any_quant():
+            # print(f"=============================== rank  {self.mapping.rank} pply_linear quant has quant") if self.mapping.rank == 0 else None
             if self.input_quantizer is not None:
+                # print(f"=============================== rank  {self.mapping.rank} apply_linear quant quantizer: {input}") if self.mapping.rank == 0 else None
                 act_input, input_scale = self.input_quantizer(input)
+                # print(f"=============================== rank  {self.mapping.rank} apply_linear quant quantizer 2: {act_input}  {input_scale}  {input_scale.shape}") if self.mapping.rank == 0 else None
 
+        # print(f"=============================== rank  {self.mapping.rank} apply_linear quant: {act_input}  {input_scale}   {bias}") if self.mapping.rank == 0 else None
         output = self._do_linear(act_input, input_scale, bias)
+        # print(f"=============================== rank  {self.mapping.rank} apply_linear quant 1: {output}") if self.mapping.rank == 0 else None
 
         if self.lora is not None and bool(lora_params):
             lora_result = self.lora(input, lora_params, layer_idx)
@@ -424,6 +440,7 @@ class Linear(nn.Module):
         quant_mode = self.quant_config.quant_mode if self.quant_config else None
         if self.input_quantizer:
             self.input_quantizer.load_weight(weights, INPUT_SCALE_NAME)
+            self.input_scale = self.input_quantizer.scale
             self.inv_input_scale = self.input_quantizer.inv_scale
 
         # load weight shard onto GPU to speed up operations on the shards

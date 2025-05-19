@@ -658,7 +658,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
         residual: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
-        print(f"============================= forward layer: {self.layer_idx}   {hidden_states}")
+        # print(f"============================= rank  {self.mapping.rank} forward layer 0: {self.layer_idx}   {hidden_states}") if self.mapping.rank == 0 else None
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -673,21 +673,24 @@ class DeepseekV3DecoderLayer(DecoderLayer):
             **kwargs,
         )
 
-        print(f"============================= forward layer 1: {self.layer_idx}  {hidden_states}")
+        # print(f"============================= rank  {self.mapping.rank} forward layer 1: {self.layer_idx}  {hidden_states}") if self.mapping.rank == 0 else None
 
         if isinstance(self.mlp, Deepseekv3MoE):
-            return self.forward_MoE(
+            results = self.forward_MoE(
                 hidden_states=hidden_states,
                 attn_metadata=attn_metadata,
                 residual=residual,
             )
+            # print(f"============================= rank  {self.mapping.rank} forward layer 2: {self.layer_idx}  {results}") if self.mapping.rank == 0 else None
+            return results
         else:
             assert isinstance(self.mlp, GatedMLP)
-            return self.forward_mlp(
+            results = self.forward_mlp(
                 hidden_states=hidden_states,
                 residual=residual,
             )
-        print(f"============================= forward layer 1: {self.layer_idx}  {hidden_states}")
+            # print(f"============================= rank  {self.mapping.rank} forward layer 3: {self.layer_idx}  {results}") if self.mapping.rank == 0 else None
+            return results
 
     def forward_MoE(
         self,
@@ -784,7 +787,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
         hidden_states: torch.Tensor,
         residual: torch.Tensor,
     ) -> torch.Tensor:
-
+        # print(f"==================== rank  {self.mapping.rank} forward mlp 0: {hidden_states}  {residual}") if self.mapping.rank == 0 else None
         if self.fusion_config.PRE_MLP_FUSION:
             act_fp4, act_sf, residual = self.allreduce(
                 hidden_states,
@@ -795,18 +798,22 @@ class DeepseekV3DecoderLayer(DecoderLayer):
                     scale=self.mlp.gate_up_proj.input_scale,
                     eps=self.post_attention_layernorm.variance_epsilon,
                 ))
+            # print(f"==================== rank  {self.mapping.rank} forward mlp 1: {act_fp4}  {act_sf}   {residual}") if self.mapping.rank == 0 else None
             hidden_states = Fp4QuantizedTensor(act_fp4, act_sf)
+            # print(f"==================== rank  {self.mapping.rank} forward mlp 2: {hidden_states}  {residual}") if self.mapping.rank == 0 else None
         else:
             # No fusion
             hidden_states, residual = self.post_attention_layernorm(
                 hidden_states, residual)
+            # print(f"==================== rank  {self.mapping.rank} forward mlp 3: {hidden_states}   {residual}") if self.mapping.rank == 0 else None
 
-        print(f"==================== forward mlp")
+        # print(f"==================== rank  {self.mapping.rank} forward mlp 3 - 1: {hidden_states}   {residual}") if self.mapping.rank == 0 else None
         hidden_states = self.mlp(
             hidden_states,
             final_all_reduce_params=AllReduceParams(enable_allreduce=not (
                 self.fusion_config.POST_MLP_FUSION or self.mlp_tp_size == 1)),
         )
+        # print(f"==================== rank  {self.mapping.rank} forward mlp 4: {hidden_states}") if self.mapping.rank == 0 else None
 
         if self.fusion_config.POST_MLP_FUSION:
             hidden_states, residual = self.allreduce(
@@ -817,10 +824,12 @@ class DeepseekV3DecoderLayer(DecoderLayer):
                     norm_weight=self.next_layer_layernorm.weight,
                     eps=self.next_layer_layernorm.variance_epsilon,
                 ))
+            # print(f"==================== rank  {self.mapping.rank} forward mlp 5: {hidden_states}  {residual}") if self.mapping.rank == 0 else None
         else:
             if self.next_layer_layernorm is not None:
                 hidden_states, residual = self.next_layer_layernorm(
                     hidden_states, residual)
+                # print(f"==================== rank  {self.mapping.rank} forward mlp 6: {hidden_states}  {residual}") if self.mapping.rank == 0 else None
 
         return hidden_states, residual
 
