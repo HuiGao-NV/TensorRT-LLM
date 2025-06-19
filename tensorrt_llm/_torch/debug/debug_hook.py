@@ -13,8 +13,15 @@ import tensorrt_llm
 # A context container which contains the running states, such as the layer structures,
 # log folder, hooks to run, is pre_forward or after forward, etc.
 class DebuggerContext:
+    """
+    A context container which contains the running states, such as the layer structures,
+    log folder, hooks to run, is pre_forward or after forward, etc.
 
-    def __init__(self, dest_folder=None):
+    Arguments:
+        dest_folder: str
+                The working directory set to debug context to set where the hook dumped data/info.
+    """
+    def __init__(self, dest_folder: str=None):
         self.pre_forward_actions = {}
         self.after_forward_actions = {}
 
@@ -29,10 +36,6 @@ class DebuggerContext:
         self.log_folder = dest_folder
         self.is_pre_forward = True
         self.is_log_folder_inited: bool = False
-
-    def set_log_folder(self, log_folder):
-        self.log_folder = log_folder
-        self.is_log_folder_inited = False
 
     def _init_log_folder(self):
         if self.is_log_folder_inited:
@@ -186,7 +189,7 @@ def module_after_forward(module: nn.Module, input: torch.Tensor,
     return output
 
 
-def enable_debug_all_modules(dest_folder: Optional[str] = None, ):
+def enable_debug_all_modules(dest_folder: Optional[str] = None):
     """
     The function style to interface to enable debugger on all classes inherit from nn.Module.
     Example:
@@ -251,9 +254,9 @@ def debugger_addon_all_modules(dest_folder: Optional[str] = None):
         None
     """
     try:
-        enable_debug(dest_folder, filter)
+        enable_debug_all_modules(dest_folder)
     finally:
-        disable_debug()
+        disable_debug_all_modules()
 
 
 def pre_forward(module: nn.Module, args, kwargs):
@@ -316,7 +319,7 @@ def after_forward(module: nn.Module, args, kwargs, output):
     return None
 
 
-def enable_debug(model, dest_folder: Optional[str] = None, filter=None):
+def enable_debug(model: nn.Module, dest_folder: Optional[str] = None, filter: Optional[Filter]=None):
     """
     The function style to interface to enable debugger on model.
     If filter is provided, it will be used to filter out satisfied module to register hook.
@@ -387,7 +390,7 @@ def disable_debug():
 
 
 @contextmanager
-def debug_mode(model, dest_folder: Optional[str] = None, filter=None):
+def debug_mode(model: nn.Module, dest_folder: Optional[str] = None, filter: Optional[Filter]=None):
     """
     The context manager style interface to enable debugger on model.
     If filter is provided, it will be used to filter out satisfied module to register hook.
@@ -430,11 +433,13 @@ def get_forward_arg_names(module: nn.Module):
     return None
 
 
-# Below is one hook for dump tensors.
-# Normally, if you want implement one hook, you need to implement one filter by
-# inheriting from base class Filter and one function which defines what to do,
-# such as dump data, modify data, inject actions, etc.
 class DumpTensorFilter(Filter):
+    """
+    Below is one hook for dump tensors.
+    Normally, if you want implement one hook, you need to implement one filter by
+    inheriting from base class Filter and one function which defines what to do,
+    such as dump data, modify data, inject actions, etc.
+    """
 
     def __init__(self):
         pass
@@ -478,7 +483,6 @@ def dump_tensor(module: nn.Module, data_tensor, debug_ctx: DebuggerContext):
 
     def dump_tensor_data(t):
         file_path = get_dump_file_path(t)
-        # print(f"Saving tensor data to {file_path}")
         torch.save(t, file_path)
 
     def dump(t):
