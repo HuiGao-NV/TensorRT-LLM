@@ -20,6 +20,7 @@
 #include "tensorrt_llm/common/dataType.h"
 #include "tensorrt_llm/common/mcastDevMemUtils.h"
 #include "tensorrt_llm/common/opUtils.h"
+#include "tensorrt_llm/runtime/ipcUtils.h"
 #include "tensorrt_llm/kernels/communicationKernels/allReduceFusionKernels.h"
 #include "tensorrt_llm/kernels/communicationKernels/customLowPrecisionAllReduceKernels.h"
 #include "tensorrt_llm/kernels/communicationKernels/mnnvlTwoShotAllreduceKernels.h"
@@ -34,6 +35,8 @@
 #include "tensorrt_llm/thop/fp8Op.h"
 #include "tensorrt_llm/thop/thUtils.h"
 #include "tensorrt_llm/thop/userbuffersTensor.h"
+#include "tensorrt_llm/runtime/mcastGPUBuffer.h"
+#include "tensorrt_llm/kernels/communicationKernels/allReduceWorkspace.h"
 
 #if ENABLE_MULTI_DEVICE
 #include <ATen/cuda/EmptyTensor.h>
@@ -41,20 +44,162 @@
 #endif // ENABLE_MULTI_DEVICE
 #include <nvml.h>
 #include <torch/extension.h>
+#include <unique_ptr>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
 
 // using namespace nvinfer1;
 using tensorrt_llm::kernels::AllReduceFusionOp;
 using tensorrt_llm::kernels::AllReduceStrategyType;
 using tensorrt_llm::mpi::MpiTag;
+using SizeType32 = tensorrt_llm::runtime::SizeType32;
 
 namespace torch_ext
 {
 
 #if ENABLE_MULTI_DEVICE
+
+at::Tensor mnnvlTwoShotAllReduce(
+    at::Tensor const& input, at::Tensor& comm_buffer, at::Tensor& buffer_flags, bool wait_for_results);
+
+std::vector<torch::Tensor> twoShotRMSNorm(torch::Tensor const& comm_buf, torch::Tensor const& gamma, double epsilon,
+    torch::Tensor const& residual, torch::Tensor& buffer_flags);
+
+
+std::tuple<std::vector<std::unique_ptr<IpcMemory>>, torch.LongTensor> allocate_allreduce_fusion_workspace(
+        std::std::set<int> const& tp_group, std::size_t size, WorldConfig const& worldConfig, bool is_p2p_supported, std::shared_ptr<tensorrt_llm::runtime::BufferManager>& bufferManager)
+{
+    size_t tp_size = tp_group.size();
+    size_t ipc_buffers_size = size * tp_size;
+    auto ipc_buffers = std::make_unique<IpcMemory>(ipc_buffers_size, bufferManager, worldConfig, is_p2p_supported);
+    auto ipc_barriers = std::make_unique<IpcMemory>(256 * tp_size, bufferManager, worldConfig, is_p2p_supportedrted);
+    auto lamport_buffers = std::make_unique<IpcMemory>(3 * ipc_buffers_size, bufferManager, worldConfig, is_p2p_supported);
+
+    tensorrt_llm::kernels::ar_fusion::lamport_initialize(
+            lamport_buffers.local_ptr,
+            3 * lamport_buffers_size,
+        );
+
+    auto flag_buffer = torch.tensor([0, 0, 0, lamport_buffers_size, 0],
+                               dtype=torch.int,
+                               device="cuda");
+    std::vector<std::unique_ptr<IpcMemory>> buffers = {ipc_buffers, ipc_barriers, lamport_buffers, flag_buffer};
+
+    return std::make_tuple(std::move(buffers), torch.LongTensor(
+        ipc_buffers.serialize() + ipc_barriers.serialize() +
+        lamport_buffers.serialize() + [flag_buffer.data_ptr()],
+        dtype=torch.int64,
+        device="cuda"));
+}
+
+
+
+
+std::tuple<std::vector<std::unique_ptr<IpcMemory>>, torch.LongTensor> allocate_lowprecision_workspace(
+    std::std::set<int> tp_group, std::size_t size, WorldConfig const& worldConfig, bool is_p2p_supported, std::shared_ptr<tensorrt_llm::runtime::BufferManager>& bufferManager)
+{
+    # Force pull mode and disable lamport when force deterministic is enabled, for reducing device memory usage.
+    size_t tp_size = tp_group.size();
+    size_t ipc_buffers_size = size * tp_size;
+    auto ipc_buffers_ping = std::make_unique<IpcMemory>(ipc_buffers_size,, bufferManager, worldConfig, is_p2p_supported);
+    auto ipc_buffers_pong = std::make_unique<IpcMemory>(ipc_buffers_size,, bufferManager, worldConfig, is_p2p_supported);
+    auto ipc_barriers_in = std::make_unique<IpcMemory>(
+        IpcMemory.IPC_BARRIERS_SIZE_PER_GPU * tp_size * 2,
+        is_p2p_supported);
+    auto ipc_barriers_out = std::make_unique<IpcMemory>(
+        IpcMemory.IPC_BARRIERS_SIZE_PER_GPU * tp_size * 2,
+        is_p2p_supported);
+        std::vector<std::unique_ptr<IpcMemory>> buffers  = {
+        ipc_buffers_ping, ipc_buffers_pong, ipc_barriers_in,
+        ipc_barriers_out};
+
+    return std::make_tuple(std::move(buffers), torch.LongTensor(
+        ipc_buffers.serialize() + ipc_barriers.serialize() +
+        lamport_buffers.serialize() + [flag_buffer.data_ptr()],
+        dtype=torch.int64,
+        device="cuda"));
+}
+
+
+torch.LongTensor get_allreduce_workspace(mapping: Mapping)
+{
+    static std::unordered_map<>
+    if mapping not in allreduce_workspaces:
+        ipc_buffers, workspace = CustomAllReduceHelper.allocate_allreduce_fusion_workspace(
+            mapping,
+            CustomAllReduceHelper.max_workspace_size_auto(
+                mapping.tp_size, support_deterministic=False),
+        )
+        allreduce_workspaces[mapping] = (ipc_buffers, workspace)
+    return allreduce_workspaces[mapping][1]
+}
+
+void allocate_low_presicion_allreduce_workspace(mapping: Mapping)
+{
+    if not hasattr(_thread_local, 'lowprecision_allreduce_workspaces'):
+        _thread_local.lowprecision_allreduce_workspaces = {}
+    lowprecision_allreduce_workspaces = _thread_local.lowprecision_allreduce_workspaces
+    if mapping not in lowprecision_allreduce_workspaces:
+        ipc_buffers, workspace = CustomAllReduceHelper.allocate_lowprecision_workspace(
+            mapping,
+            CustomAllReduceHelper.max_workspace_size_lowprecision(
+                mapping.tp_size),
+        )
+        lowprecision_allreduce_workspaces[mapping] = (ipc_buffers, workspace)
+        CustomAllReduceHelper.initialize_lowprecision_buffers(
+            workspace, mapping.tp_size)
+    return;
+}
+
+
+std::tuple<McastGPUBuffer, torch.Tensor, torch.Tensor, int>  get_allreduce_mnnvl_workspace(
+    mapping: Mapping, dtype: torch.dtype
+)
+{
+    force_mn = os.environ.get("TRTLLM_FORCE_MNNVL_AR", "0") == "1"
+
+    if mapping not in allreduce_mnnvl_workspaces:
+        # buffer shape: [3, 2, buffer_tokens, hidden_dim]
+        stride = 3 * 2 * dtype.itemsize
+        # LCM for hidden_dim: 2048, 4096, 5120, 7168, 8192 = 286720
+        # max_num_elements must be a multiple of 286720
+        lcm_hidden_dim = 286720
+        buffer_size_in_bytes = math.ceil(
+            12_000_000 / (lcm_hidden_dim * stride)) * (lcm_hidden_dim * stride)
+        max_num_elements = buffer_size_in_bytes // stride
+
+        mcast_buffer = McastGPUBuffer(
+            buffer_size_in_bytes,
+            mapping.tp_size,
+            mapping.tp_rank,
+            torch.device("cuda", mapping.local_rank),
+            mapping.is_multi_node() or force_mn,
+        )
+
+        buffer = mcast_buffer.get_uc_buffer(mapping.tp_rank,
+                                            (3, 2, max_num_elements), dtype, 0)
+        # Only initialize the buffer when we need to resize it
+        buffer.fill_(-0.0)
+        # CPU barrier since we assume this should not be called in cuda graph
+        torch.cuda.synchronize()
+        mpi_barrier()
+
+        # This is a buffer to maintain the state of this allreduce Op
+        # Should have the same lifetime with self._buffer
+        # [Buffer_ptr, Clear_ptr, Buffer_size, atomic access counter]
+        buffer_flags = torch.tensor([0, 2, max_num_elements, 0],
+                                    dtype=torch.uint32,
+                                    device=torch.device("cuda",
+                                                        mapping.local_rank))
+
+        allreduce_mnnvl_workspaces[mapping] = (mcast_buffer, buffer,
+                                               buffer_flags, max_num_elements)
+    return allreduce_mnnvl_workspaces[mapping];
+}
 
 namespace
 {
@@ -141,16 +286,43 @@ std::set<int> getLocalGroup(std::set<int> const& group)
     return localGroup;
 }
 
+
+std::tuple<size_t, size_t> get_all_reduce_mnnvl_max_workspace_elements(std::size_t type_size)
+{
+    static std::unordered_map<std::size_t, std::tuple<size_t, size_t>> mnnvlMaxWorkspace;
+
+    // LCM for hidden_dim: 2048, 4096, 5120, 7168, 8192 = 286720
+    // max_num_elements must be a multiple of 286720
+    auto max_workspace = mnnvlMaxWorkspace.find(type_size);
+    if (max_workspace != mnnvlMaxWorkspace.end()) {
+        return *max_workspace;
+    }
+
+    constexpr std::size_t lcm_hidden_dim = 286720;
+    std::size_t stride = 3 * 2 * type_size;
+    auto buffer_size_in_bytes = ceil(
+        12_000_000 / (lcm_hidden_dim * stride)) * (lcm_hidden_dim * stride);
+    std::size_t max_num_elements = floor(buffer_size_in_bytes / stride);
+    std::tuple<size_t, size_t> sizes{max_num_elements, buffer_size_in_bytes};
+    mnnvlMaxWorkspace.insert(type_size, sizes);
+    return sizes;
+    // , (3, 2, max_num_elements);
+}
+
 class AllreduceOp
 {
 public:
     AllreduceOp(
-        std::set<int> group, nvinfer1::DataType type, AllReduceStrategyType strategy, AllReduceFusionOp op, float eps)
+        std::set<int> group, nvinfer1::DataType type, AllReduceStrategyType strategy, AllReduceFusionOp op, float eps, std::vector<SizeType32> ppParams)
         : mGroup(std::move(group))
         , mType(type)
         , mStrategy(strategy)
         , mOp(op)
         , mEps(eps)
+        , mPpSize(ppParams[0])
+        , mCpSize(ppParams[1])
+        , cRank(ppParams[2])
+        , mGpusPerNode(ppParams[3])
     {
     }
 
@@ -184,6 +356,8 @@ public:
                 input, residual, norm_weight, scale, bias, trigger_completion_at_end, workspace, runtime_strategy);
         case AllReduceStrategyType::LOWPRECISION:
             return runLowPrecisionAllReduce(input, residual, norm_weight, scale, bias);
+        case AllReduceStrategyType::MNNVL:
+            return runMNAllReduce(input, residual, norm_weight, workspace, mnnvl_buffer_flag);
         default: TORCH_CHECK(false, "Invalid runtime strategy"); return {};
         }
     }
@@ -554,6 +728,27 @@ private:
         return {};
     }
 
+    std::vector<torch::Tensor> runMNAllReduce(torch::Tensor const& input,
+        torch::optional<torch::Tensor> const& residual, torch::optional<torch::Tensor> const& norm_weight,
+        torch::optional<torch::Tensor> comm_buffer, torch::optional<torch::Tensor> buffer_flags)
+    {
+        bool wait_for_result = mOp == AllReduceFusionOp::NONE;
+
+        auto output = mnnvlTwoShotAllReduce(input, comm_buffer.value(), buffer_flags.value(), wait_for_result);
+        if (mOp == AllReduceFusionOp::RESIDUAL_RMS_NORM)
+        {
+            return twoShotRMSNorm(
+                comm_buffer.value(), norm_weight.value(), mEps, residual.value(), buffer_flags.value());
+        }
+        else if (mOp == AllReduceFusionOp::NONE)
+        {
+            return {output};
+        }
+
+        // Log Error here.
+        return {};
+    }
+
     std::vector<torch::Tensor> fallbackRunSubsequentOps(torch::Tensor const& input,
         torch::optional<torch::Tensor> const& residual, torch::optional<torch::Tensor> const& norm_weight,
         torch::optional<torch::Tensor> const& scale, torch::optional<torch::Tensor> const& bias,
@@ -671,6 +866,11 @@ private:
         case AllReduceStrategyType::LOWPRECISION:
         {
             TLLM_LOG_DEBUG("AllReducePlugin strategy for rank %d: LOWPRECISION", rank);
+            break;
+        }
+        case AllReduceStrategyType::MNNVL:
+        {
+            TLLM_LOG_DEBUG("AllReducePlugin strategy for rank %d: MNNVL", rank);
             break;
         }
         default: break;
@@ -853,6 +1053,21 @@ private:
             }
         }
 
+        // By original logic in 
+        if (mStrategy = AllReduceStrategyType::MNNVL)
+        {
+            auto max_sizes = get_all_reduce_mnnvl_max_workspace_elements();
+            auto shape = input.shape();
+            if (message_size > std::get<0>(max_sizes) || (mType != IBuffer::DataType::kBF16 && mType != IBuffer::DataType::kFLOAT) || (self.buffer_mnnvl.shape[-1] % shape[-1] != 0) || (!mIsCP) )
+            {
+                return AllReduceStrategyType::MNNVL;
+            }
+            else
+            {
+                runtime_strategy = AllReduceStrategyType::AUTO;
+            }
+        }
+
         // Check that heuristic is only applied when AUTO is set.
         // Use Auto select
         bool const is_auto = (mStrategy == AllReduceStrategyType::AUTO);
@@ -959,6 +1174,10 @@ private:
     AllReduceFusionOp mOp;
     float mEps;
     std::shared_ptr<ncclComm_t> mNcclComm;
+    SizeType32 mPpSize{1};
+    SizeType32 mCpSize{1};
+    SizeType32 cRank{0};
+    SizeType32 mGpusPerNode{8};
 };
 
 } // namespace
@@ -969,7 +1188,7 @@ std::vector<torch::Tensor> allreduce(torch::Tensor const& input, torch::optional
     torch::optional<torch::Tensor> const& norm_weight, torch::optional<torch::Tensor> const& scale,
     torch::optional<torch::Tensor> const& bias, torch::optional<torch::Tensor> workspace,
     torch::List<int64_t> const& group_, int64_t const strategy_, int64_t const fusion_op_, double const eps_,
-    bool const trigger_completion_at_end_)
+    bool const trigger_completion_at_end_, torch::List<int64_t> pp_size)
 {
 #if ENABLE_MULTI_DEVICE
     auto const dtype = tensorrt_llm::runtime::TorchUtils::dataType(input.scalar_type());
@@ -981,7 +1200,12 @@ std::vector<torch::Tensor> allreduce(torch::Tensor const& input, torch::optional
     {
         group.insert(static_cast<int>(rank));
     }
-    AllreduceOp op(group, dtype, strategy, fusion_op, eps);
+    std::vector<SizeType32> pp_params;
+    for (SizeType32 v : pp_size)
+    {
+        pp_params.push_back[v];
+    }
+    AllreduceOp op(group, dtype, strategy, fusion_op, eps, pp_params);
     op.initialize();
     return op.run(input, residual, norm_weight, scale, bias, trigger_completion_at_end_, workspace);
 #else
