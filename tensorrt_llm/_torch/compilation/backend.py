@@ -58,7 +58,6 @@ class Backend:
 
         if Backend._graph_pool_handle is None:
             Backend._graph_pool = torch.cuda.MemPool()
-            print(f"========================================= new mem pool is created.")
             Backend._graph_pool_handle = Backend._graph_pool.id
 
         self.match_count = []

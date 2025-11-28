@@ -228,7 +228,6 @@ def create_py_executor(
 
     scheduler_config = llm_args.scheduler_config
 
-
     # Since peft_cache_config may be subject to change, avoid these changes propagate back
     # to llm_args.peft_cache_config
     peft_cache_config = copy.deepcopy(llm_args.peft_cache_config)
@@ -639,9 +638,6 @@ def create_py_executor(
                                    sampler,
                                    spec_resource_manager=spec_resource_manager,
                                    guided_decoder=guided_decoder)
-    if mapping.tp_rank == 0:
-        print("start memory snapshot")
-        torch.cuda.memory._record_memory_history()
 
     with allocation_scope(
             ExecutorMemoryType.INIT_EXTRA_RESOURCES if estimating_kv_cache else
@@ -732,11 +728,6 @@ def create_py_executor(
             )
 
     _adjust_torch_mem_fraction()
-
-    if mapping.tp_rank == 0:
-        print("dump memory snapshot")
-        torch.cuda.memory._dump_snapshot("warmup_exception_dump.pickle")
-        torch.cuda.memory._record_memory_history(enabled=None)
 
     if mapping.rank == 0:
         logger.info(f"LLM Args:\n{llm_args}")

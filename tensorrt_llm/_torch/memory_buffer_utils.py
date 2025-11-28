@@ -79,29 +79,31 @@ class Buffers:
                 best_fit_block = block
                 smallest_sufficient_size = block.buffer.numel()
 
+        for block in list(candidate_blocks):
+            if not block.is_reserved:
+                if best_fit_block is not None:
+                    if block is not best_fit_block:
+                        # Need to call del BufferBlock.buffer, otherwise memory isn't
+                        # released and OOM may happen.
+                        del block.buffer
+                        candidate_blocks.remove(block)
+                else:
+                    del block.buffer
+                    candidate_blocks.remove(block)
+
         if best_fit_block is not None:
             if reserve_buffer:
                 # A suitable buffer was found, so reuse it.
                 best_fit_block.is_reserved = True
                 return self._view_as(best_fit_block.buffer, tensor_shape, dtype)
             else:
-                for block in list(candidate_blocks):
-                    if not block.is_reserved:
-                        if block and best_fit_block is not block:
-                            # Need to call del BufferBlock.buffer, otherwise memory isn't
-                            # released and OOM may happen.
-                            print(f"======================== detected fit block not reserved")
-                            del block.buffer
-                            candidate_blocks.remove(block)
-                best_fit_block.buffer[:] = 0
-                return self._view_as(best_fit_block.buffer, tensor_shape, dtype)
-        else:
-            for block in list(candidate_blocks):
-                if not block.is_reserved:
-                    # Need to call del BufferBlock.buffer, otherwise memory isn't
-                    # released and OOM may happen.
-                    del block.buffer
-                    candidate_blocks.remove(block)
+                # TODO: to reuse tensors both in graph pool and normal pool.
+                if best_fit_block.is_reserved:
+                    return self._view_as(best_fit_block.buffer, tensor_shape,
+                                         dtype)
+                else:
+                    del best_fit_block.buffer
+                    candidate_blocks.remove(best_fit_block)
 
         def _create_buffer():
             return torch.zeros((required_memory_size, ),
@@ -118,11 +120,10 @@ class Buffers:
             logger.debug(
                 f"Exception happened to create tensor from given memory pool: {str(ex)}"
             )
-            # if exception happens during allocating memory from shared pool, retry
-            # to allocate from default pool
+            # if exception happens during allocating memory from default pool, retry
+            # to allocate from shared pool. Try best to avoid fragmentation in shared pool.
             mem_pool = get_shared_pool()
             if mem_pool is not None:
-                print(f"======================== allocate from shared pool")
                 with torch.cuda.memory.use_mem_pool(mem_pool):
                     new_buffer_tensor = _create_buffer()
             else:

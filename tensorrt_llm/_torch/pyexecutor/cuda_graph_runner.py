@@ -98,7 +98,6 @@ class CUDAGraphRunner:
         self.graph_outputs: Dict[Tuple[int, int, int],
                                  Callable[[], Optional[torch.Tensor]]] = {}
         self.graph_metadata: Dict[Tuple[int, int, int], Dict[str, Any]] = {}
-        self.memory_pool = config.cuda_graph_mem_pool
         self.memory_pool = config.cuda_graph_mem_pool if config.cuda_graph_mem_pool else torch.cuda.MemPool(
         )
         self.memory_pool_handle = self.memory_pool.id
@@ -285,7 +284,6 @@ class CUDAGraphRunner:
 
         if self.memory_pool_handle is None or self.memory_pool is None:
             self.memory_pool = torch.cuda.MemPool()
-            print(f"========================================= new mem pool is created.")
             self.memory_pool_handle = self.memory_pool.id
 
         # We have to do warm up runs to initialize PyTorch's

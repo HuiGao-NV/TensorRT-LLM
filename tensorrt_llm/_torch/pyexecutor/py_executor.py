@@ -362,9 +362,6 @@ class PyExecutor:
                     target=self._event_loop_wrapper, daemon=True)
                 self.worker_thread.start()
                 self.worker_started = True
-        if self.dist.rank == 0:
-            print("----------------------------------------------- start memory snapshot")
-            torch.cuda.memory._record_memory_history()
 
     def _set_global_steady_clock_offset(self):
         assert self.global_rank >= 0, "rank should be >= 0"
@@ -2035,10 +2032,6 @@ class PyExecutor:
         except Exception as e:
             traceback.print_exc()
             error_msg = str(e)
-            if self.dist.rank == 0:
-                print("------------------------------------ dump memory snapshot")
-                torch.cuda.memory._dump_snapshot("exception_dump.pickle")
-
             logger.error(
                 f"Encountered an error in forward function: {error_msg}")
             self._handle_errors(error_msg)
