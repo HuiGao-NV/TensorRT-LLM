@@ -2048,6 +2048,15 @@ def print_device_memory():
     memory_str = get_device_memory_str()
     print(f"Device Memory:\ntotal:   reserved:   used:   free:  \n{memory_str}")
 
+    mem_stats = torch.cuda.memory_stats()
+    torch_used_bytes = mem_stats["allocated_bytes.all.current"]
+    torch_used_bytes = mem_stats["reserved_bytes.all.current"]
+    print(
+        f"================================== torch mem stats: allocated {torch_used_bytes}  reserved  {torch_used_bytes}"
+    )
+    print(f"\n--- nvidia-smi in print_device_memory  ---")
+    sp.run(["nvidia-smi"], check=False)
+
 
 def pytest_addoption(parser):
     parser.addoption(

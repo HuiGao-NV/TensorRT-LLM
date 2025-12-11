@@ -14,6 +14,7 @@
 # limitations under the License.
 import os
 import sys
+import time
 
 import pytest
 import torch
@@ -532,7 +533,9 @@ class TestLlama3_2_1B(LlmapiAccuracyTestHarness):
     MODEL_PATH = f"{llm_models_root()}/llama-3.2-models/Llama-3.2-1B"
     EXAMPLE_FOLDER = "models/core/llama"
 
-    def test_auto_dtype(self):
+    @pytest.mark.parametrize("pp_size", [2, 4], ids=["pp2", "pp4"])
+    def test_auto_dtype(self, pp_size):
+        print_device_memory()
         with LLM(self.MODEL_PATH) as llm:
             task = CnnDailymail(self.MODEL_NAME)
             task.evaluate(llm)
@@ -1327,6 +1330,7 @@ class TestDeepSeekV3Lite(LlmapiAccuracyTestHarness):
     @parametrize_with_ids("mtp_nextn", [0, 2])
     def test_bfloat16(self, mtp_nextn, attention_dp, cuda_graph,
                       overlap_scheduler, torch_compile, enable_chunked_prefill):
+        print_device_memory()
         kv_cache_config = KvCacheConfig(free_gpu_memory_fraction=0.75)
         torch_compile_config = TorchCompileConfig(
             enable_fullgraph=True,
@@ -1350,6 +1354,11 @@ class TestDeepSeekV3Lite(LlmapiAccuracyTestHarness):
                  speculative_config=mtp_config) as llm:
             task = GSM8K(self.MODEL_NAME)
             task.evaluate(llm)
+            print_device_memory()
+
+        time.sleep(60)
+        print(f"================= print mem after 60s")
+        print_device_memory()
 
     @pytest.mark.skip_less_device_memory(60000)
     def test_bfloat16_2_model_mtp(self):
@@ -2251,6 +2260,7 @@ class TestDeepSeekR1(LlmapiAccuracyTestHarness):
                               attention_dp, enable_lm_head_tp_in_adp,
                               cuda_graph, overlap_scheduler, max_batch_size,
                               moe_backend):
+        print(f"\n--- nvidia-smi start to test  ---")
         print_device_memory()
         if moe_backend == "TRTLLM" and (get_sm_version() == 120
                                         or get_sm_version() == 121):
@@ -2294,6 +2304,11 @@ class TestDeepSeekR1(LlmapiAccuracyTestHarness):
             # task = GPQADiamond(self.MODEL_NAME)
             # task.evaluate(llm,
             #               extra_evaluator_kwargs=dict(apply_chat_template=True))
+            print("=================================== test finishes")
+            print_device_memory()
+        time.sleep(60)
+        print(f"\n--- nvidia-smi after testing after 60s  ---")
+        print_device_memory()
 
     @skip_pre_blackwell
     @pytest.mark.parametrize(

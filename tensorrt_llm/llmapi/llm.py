@@ -168,6 +168,10 @@ class BaseLLM:
                         f"{self.__class__.__name__} got invalid argument: {key}"
                     )
 
+            import os
+            print(
+                f"====================== llm class is: {llm_args_cls} pid:  {os.getpid()}"
+            )
             self.args = llm_args_cls.from_kwargs(
                 model=model,
                 tokenizer=tokenizer,
@@ -782,6 +786,10 @@ class BaseLLM:
 
     @set_api_status("beta")
     def shutdown(self) -> None:
+        import traceback
+        traceback.print_stack()
+        import os
+        print(f"====================== shutdown is called pid:  {os.getpid()}")
         if hasattr(self, "_executor") and self._executor is not None:
             self._executor.shutdown()
             self._executor = None
@@ -805,6 +813,10 @@ class BaseLLM:
     def _shutdown_wrapper(self_ref):
         # Retrieve the instance if it still exists
         instance = self_ref()
+        import traceback
+        traceback.print_stack()
+        import os
+        print(f"====================== shutdown is called pid:  {os.getpid()}")
         if instance is not None:
             instance.shutdown()
 
@@ -816,6 +828,10 @@ class BaseLLM:
     ) -> Literal[
             False]:  # https://github.com/microsoft/pyright/issues/7009#issuecomment-1894135045
         del exc_value, traceback
+        import traceback
+        traceback.print_stack()
+        import os
+        print(f"====================== shutdown is called pid:  {os.getpid()}")
         self.shutdown()
         return False  # propagate exceptions
 
