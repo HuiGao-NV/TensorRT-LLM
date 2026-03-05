@@ -4,7 +4,6 @@ import functools
 import gc
 import inspect
 import math
-import os
 import weakref
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
@@ -16,6 +15,7 @@ import torch._dynamo.config
 import tensorrt_llm.bindings.internal.userbuffers as ub
 from tensorrt_llm._utils import (is_trace_enabled, nvtx_range, release_gc,
                                  torch_dtype_to_str, trace_func)
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.inputs.multimodal import (MultimodalParams,
                                             MultimodalRuntimeData)
 from tensorrt_llm.inputs.registry import (create_input_processor,
@@ -664,7 +664,7 @@ class PyTorchModelEngine(ModelEngine):
                 self.original_max_draft_len), self.max_num_tokens,
             self.batch_size * (self.max_seq_len - 1))
 
-        cache_path = os.environ.get("TLLM_AUTOTUNER_CACHE_PATH", None)
+        cache_path = TRTLLMENV.get("TLLM_AUTOTUNER_CACHE_PATH", None)
         with self.no_cuda_graph(), autotune(cache_path=cache_path):
             warmup_request = self._create_warmup_request(
                 resource_manager, curr_max_num_tokens, 0)
@@ -1156,7 +1156,7 @@ class PyTorchModelEngine(ModelEngine):
 
     def _init_max_seq_len(self):
         # Allow user to override the inferred max_seq_len with a warning.
-        allow_long_max_model_len = os.getenv(
+        allow_long_max_model_len = TRTLLMENV.get(
             "TLLM_ALLOW_LONG_MAX_MODEL_LEN",
             "0").lower() in ["1", "true", "yes", "y"]
 

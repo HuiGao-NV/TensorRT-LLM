@@ -26,6 +26,8 @@ import tempfile
 import trace
 import traceback
 import weakref
+
+from tensorrt_llm.env_utils import TRTLLMENV
 from contextlib import contextmanager
 from enum import EnumMeta
 from functools import lru_cache, partial, wraps
@@ -534,7 +536,7 @@ def torch_comm():
 
 def mpi_disabled() -> bool:
     """True if TLLM_DISABLE_MPI is set to "1", False otherwise."""
-    return os.environ.get("TLLM_DISABLE_MPI") == "1"
+    return TRTLLMENV.get("TLLM_DISABLE_MPI") == "1"
 
 
 def mpi_rank():
@@ -771,7 +773,7 @@ def print_all_stacks():
 
 
 def is_trace_enabled(env_var: str):
-    value = os.environ.get(env_var, "-1")
+    value = TRTLLMENV.get(env_var, "-1")
     if value == "ALL":
         return True
     if value == "-1":
@@ -939,8 +941,8 @@ def nvtx_range_debug(msg: str,
         contextmanager: A context manager that either marks the NVTX range if enabled,
                         or a null context manager that does nothing if disabled.
     """
-    if os.getenv("TLLM_LLMAPI_ENABLE_NVTX", "0") == "1" or \
-            os.getenv("TLLM_NVTX_DEBUG", "0") == "1":
+    if TRTLLMENV.get("TLLM_LLMAPI_ENABLE_NVTX", "0") == "1" or \
+            TRTLLMENV.get("TLLM_NVTX_DEBUG", "0") == "1":
         return nvtx_range(msg, color=color, domain=domain, category=category)
     else:
         return _null_context_manager()
@@ -953,8 +955,8 @@ def nvtx_mark_debug(msg: str,
     """
     Creates an NVTX marker for debugging purposes.
     """
-    if os.getenv("TLLM_LLMAPI_ENABLE_NVTX", "0") == "1" or \
-            os.getenv("TLLM_NVTX_DEBUG", "0") == "1":
+    if TRTLLMENV.get("TLLM_LLMAPI_ENABLE_NVTX", "0") == "1" or \
+            TRTLLMENV.get("TLLM_NVTX_DEBUG", "0") == "1":
         nvtx_mark(msg, color=color, domain=domain, category=category)
 
 
@@ -1211,15 +1213,15 @@ class KVCacheEventSerializer:
 def set_prometheus_multiproc_dir() -> object:
     # Adapted from: https://github.com/sgl-project/sglang/blob/v0.4.10/python/sglang/srt/utils.py#L1266
     global prometheus_multiproc_dir
-    if "PROMETHEUS_MULTIPROC_DIR" in os.environ:
+    if "PROMETHEUS_MULTIPROC_DIR" in TRTLLMENV:
         logger.info("User set PROMETHEUS_MULTIPROC_DIR detected.")
         prometheus_multiproc_dir = tempfile.TemporaryDirectory(
-            dir=os.environ["PROMETHEUS_MULTIPROC_DIR"])
+            dir=TRTLLMENV["PROMETHEUS_MULTIPROC_DIR"])
     else:
         prometheus_multiproc_dir = tempfile.TemporaryDirectory()
-        os.environ["PROMETHEUS_MULTIPROC_DIR"] = prometheus_multiproc_dir.name
+        TRTLLMENV["PROMETHEUS_MULTIPROC_DIR"] = prometheus_multiproc_dir.name
     logger.info(
-        f"PROMETHEUS_MULTIPROC_DIR: {os.environ['PROMETHEUS_MULTIPROC_DIR']}")
+        f"PROMETHEUS_MULTIPROC_DIR: {TRTLLMENV['PROMETHEUS_MULTIPROC_DIR']}")
 
 
 def confidential_compute_enabled() -> bool:
@@ -1345,7 +1347,7 @@ def _setup_gc_nvtx_profiling() -> Optional[_GCNvtxHandle]:
     if _gc_watcher_handle is not None:
         return _gc_watcher_handle
 
-    enabled = os.environ.get(PROFILE_RECORD_GC_ENV_VAR_NAME, None)
+    enabled = TRTLLMENV.get(PROFILE_RECORD_GC_ENV_VAR_NAME, None)
     if not enabled:
         return None
 

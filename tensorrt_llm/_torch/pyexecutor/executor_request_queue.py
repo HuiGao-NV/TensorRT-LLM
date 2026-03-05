@@ -1,7 +1,6 @@
 import dataclasses
 import datetime
 import heapq
-import os
 import queue
 import threading
 import time
@@ -12,6 +11,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import torch
 
 from tensorrt_llm._utils import mpi_disabled, nvtx_range
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.mapping import CpType
 
 from ..distributed import Distributed
@@ -617,7 +617,7 @@ class ExecutorRequestQueue:
         # 1. rank1 will wait on nccl.send(rank2), without invoking mpi.wait(isend-handle)
         # 2. rank2 will wait on mpi.recv(rank1) but never receive the new requests.
         # 3. rank1 will hang on nccl.send because rank2 will never reach nccl.recv(rank1).
-        pp_send_func = self.dist.isend_object if os.environ.get(
+        pp_send_func = self.dist.isend_object if TRTLLMENV.get(
             "TRTLLM_PP_REQ_SEND_ASYNC", "0") == "1" else self.dist.send_object
 
         if not self.dist.is_last_pp_rank:

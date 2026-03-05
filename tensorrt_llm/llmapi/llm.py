@@ -15,6 +15,7 @@ from tqdm import tqdm
 from transformers import PreTrainedTokenizerBase
 
 from tensorrt_llm._utils import mpi_disabled
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.inputs.data import TextPrompt
 from tensorrt_llm.inputs.multimodal import MultimodalInput, MultimodalParams
 from tensorrt_llm.inputs.registry import (BaseMultimodalInputProcessor,
@@ -149,7 +150,7 @@ class BaseLLM:
                 llm_args_cls = TorchLlmArgs
                 if self._orchestrator_type == "ray" or mpi_disabled():
                     self._orchestrator_type = "ray"
-                    os.environ["TLLM_DISABLE_MPI"] = "1"
+                    TRTLLMENV["TLLM_DISABLE_MPI"] = "1"
                     # Propagate to args construction
                     kwargs["orchestrator_type"] = "ray"
 
@@ -197,7 +198,7 @@ class BaseLLM:
         self.mpi_session = self.args.mpi_session
 
         if self.args.parallel_config.is_multi_gpu:
-            if os.getenv("RAY_LOCAL_WORLD_SIZE") is None and get_device_count(
+            if TRTLLMENV.get("RAY_LOCAL_WORLD_SIZE") is None and get_device_count(
             ) < self.args.parallel_config.world_size_per_node:
                 raise RuntimeError(
                     f"Only {get_device_count()} GPUs are available, but {self.args.parallel_config.world_size} are required."
@@ -635,12 +636,12 @@ class BaseLLM:
         # from os.environ on-demand.
         for key, value in env_overrides.items():
             str_value = str(value)
-            if key in os.environ:
-                old_value = os.environ[key]
-                os.environ[key] = str_value
+            if key in TRTLLMENV:
+                old_value = TRTLLMENV[key]
+                TRTLLMENV[key] = str_value
                 logger.info(f"Overriding {key}: '{old_value}' -> '{str_value}'")
             else:
-                os.environ[key] = str_value
+                TRTLLMENV[key] = str_value
                 logger.info(f"Setting {key}='{str_value}'")
 
     def _prepare_sampling_params(
@@ -964,7 +965,7 @@ class _TrtLLM(BaseLLM):
         if self.args.kv_cache_config is not None:
             self._executor_config.kv_cache_config = PybindMirror.maybe_to_pybind(
                 self.args.kv_cache_config)
-        if os.getenv("FORCE_DETERMINISTIC", "0") == "1":
+        if TRTLLMENV.get("FORCE_DETERMINISTIC", "0") == "1":
             # Disable KV cache reuse for deterministic mode
             self._executor_config.kv_cache_config.enable_block_reuse = False
             self._executor_config.kv_cache_config.enable_partial_reuse = False

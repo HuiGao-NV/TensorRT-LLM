@@ -1,7 +1,6 @@
 import copy
 import gc
 import importlib
-import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from strenum import StrEnum
 
 import tensorrt_llm
 from tensorrt_llm._torch.pyexecutor.resource_manager import ResourceManagerType
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm._utils import get_sm_version
 from tensorrt_llm.llmapi.llm_args import (CapacitySchedulerPolicy,
                                           ContextChunkingPolicy,
@@ -234,7 +234,7 @@ def create_py_executor(
 
     assert llm_args.kv_cache_config, "Expect llm_args.kv_cache_config is not None"
     kv_cache_config = llm_args.kv_cache_config
-    if os.getenv("FORCE_DETERMINISTIC", "0") == "1":
+    if TRTLLMENV.get("FORCE_DETERMINISTIC", "0") == "1":
         # Disable KV cache reuse for deterministic mode
         kv_cache_config.enable_block_reuse = False
         kv_cache_config.enable_partial_reuse = False

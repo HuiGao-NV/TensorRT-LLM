@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 from collections import defaultdict
 from typing import Any, Dict, List, NamedTuple
 
 import torch
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 try:
     import pynvml
@@ -212,7 +213,7 @@ class ReportUtility:
             return None
 
         try:
-            cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+            cuda_visible = TRTLLMENV.get("CUDA_VISIBLE_DEVICES", "").strip()
             physical_idx = int(
                 cuda_visible.split(",")[0].strip()) if cuda_visible else 0
 

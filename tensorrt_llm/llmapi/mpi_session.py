@@ -13,6 +13,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, TypeVar
 import zmq
 
 from tensorrt_llm.bindings.BuildInfo import ENABLE_MULTI_DEVICE
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 
 from .._utils import global_mpi_rank, mpi_barrier, mpi_rank
@@ -554,7 +555,7 @@ def get_mpi_world_size() -> int:
 
     # If the proxy process is spawned, the MPI-related env will be cleaned in the proxy process, thus we made another env for the mpi_world_size
     if get_spawn_proxy_process_env():
-        return int(os.getenv("tllm_mpi_size") or 1)
+        return int(TRTLLMENV.get("tllm_mpi_size") or 1)
     else:
         return mpi_world_size()
 
@@ -571,7 +572,7 @@ def split_mpi_env(mpi_env_keys: List[str] | None = None) -> Tuple[dict, dict]:
             - non_mpi_env: Environment dictionary without MPI-related variables
             - mpi_env: Environment dictionary containing only MPI-related variables
     '''
-    current_env = os.environ.copy()
+    current_env = TRTLLMENV.copy()
 
     # Identify MPI-related variables
     mpi_vars = set(

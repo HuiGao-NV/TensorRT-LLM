@@ -24,6 +24,7 @@ try:
 except ImportError:
     PlacementGroup = None
 
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.lora_helper import (LoraConfig,
                                       get_default_trtllm_modules_to_hf_modules)
 
@@ -2201,7 +2202,7 @@ class BaseLlmArgs(StrictBaseModel):
     @field_validator("gpus_per_node", mode='before')
     @classmethod
     def validate_gpus_per_node(cls, v, info):
-        if os.getenv("RAY_LOCAL_WORLD_SIZE") is not None:
+        if TRTLLMENV.get("RAY_LOCAL_WORLD_SIZE") is not None:
             return info.data.get("tensor_parallel_size")
         if v is None:
             logger.warning(

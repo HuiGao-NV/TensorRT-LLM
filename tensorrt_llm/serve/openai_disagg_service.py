@@ -14,8 +14,9 @@
 
 import asyncio
 import copy
-import os
 from typing import Any, Callable, Dict, Optional
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 from tensorrt_llm.llmapi.disagg_utils import (
     ConditionalDisaggConfig,
@@ -179,7 +180,7 @@ class OpenAIDisaggregatedService(OpenAIService):
         return None, True
 
     async def _check_gen_only_disagg(self, request: UCompletionRequest) -> bool:
-        if os.getenv("TRTLLM_DISAGG_BENCHMARK_GEN_ONLY") == "1":
+        if TRTLLMENV.get("TRTLLM_DISAGG_BENCHMARK_GEN_ONLY") == "1":
             # Hard-code first token, ctx_request_id for testing
             request.disaggregated_params = DisaggregatedParams(
                 request_type="generation_only",
@@ -251,7 +252,7 @@ class OpenAIDisaggregatedService(OpenAIService):
 
     async def _wait_for_all_servers_ready(self) -> None:
         # Skip context servers if TRTLLM_DISAGG_BENCHMARK_GEN_ONLY is set
-        gen_only = os.getenv("TRTLLM_DISAGG_BENCHMARK_GEN_ONLY") == "1"
+        gen_only = TRTLLMENV.get("TRTLLM_DISAGG_BENCHMARK_GEN_ONLY") == "1"
 
         async def check_servers_ready():
             elapsed_time = 0

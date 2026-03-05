@@ -1,6 +1,7 @@
 import functools
-import os
 import subprocess  # nosec B404
+
+from tensorrt_llm.env_utils import TRTLLMENV
 from pathlib import Path
 from typing import Any, Callable, List, Literal
 
@@ -143,7 +144,7 @@ def run_process(cmd: List[Any],
         cwd=run_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT if stderr_on_stdout else subprocess.PIPE,
-        env=os.environ if use_environ else None,
+        env=TRTLLMENV if use_environ else None,
         text=True,
     )
     return result

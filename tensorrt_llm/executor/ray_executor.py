@@ -1,5 +1,4 @@
 import asyncio
-import os
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -14,6 +13,7 @@ from ray.util.placement_group import (PlacementGroupSchedulingStrategy,
 
 from tensorrt_llm._ray_utils import unwrap_ray_errors
 from tensorrt_llm._utils import nvtx_range_debug
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 
 from ..llmapi.utils import logger_debug
@@ -38,8 +38,8 @@ class RayExecutor(RpcExecutorMixin, GenerationExecutor):
                  postproc_worker_config: PostprocWorkerConfig,
                  is_llm_executor: bool,
                  tp_size=1):
-        os.environ['RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES'] = '1'
-        os.environ["RAY_DEDUP_LOGS"] = "0"  # for debug
+        TRTLLMENV['RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES'] = '1'
+        TRTLLMENV["RAY_DEDUP_LOGS"] = "0"  # for debug
 
         super().__init__(model_world_size, postproc_worker_config,
                          is_llm_executor)
@@ -59,7 +59,7 @@ class RayExecutor(RpcExecutorMixin, GenerationExecutor):
         }
 
         try:
-            if os.environ.get("TLLM_RAY_FORCE_LOCAL_CLUSTER", "0") != "1":
+            if TRTLLMENV.get("TLLM_RAY_FORCE_LOCAL_CLUSTER", "0") != "1":
                 try:
                     ray.init(address="auto", **ray_init_args)
                     logger.info(f"Attached to an existing Ray cluster.")
@@ -114,14 +114,14 @@ class RayExecutor(RpcExecutorMixin, GenerationExecutor):
 
         # When set to be a fraction, it allows Ray to schedule
         # multiple actors on a single GPU for colocate use cases.
-        num_gpus = float(os.getenv("TRTLLM_RAY_PER_WORKER_GPUS", "1.0"))
+        num_gpus = float(TRTLLMENV.get("TRTLLM_RAY_PER_WORKER_GPUS", "1.0"))
         if placement_config and placement_config.per_worker_gpu_share is not None:
             num_gpus = placement_config.per_worker_gpu_share
 
         logger.debug(f"{num_gpus=} for each worker.")
 
         runtime_env = ray.runtime_env.RuntimeEnv()
-        runtime_env["env_vars"] = os.environ.copy()
+        runtime_env["env_vars"] = TRTLLMENV.copy()
         runtime_env["env_vars"].update({
             "TLLM_DISABLE_MPI": "1",
             "MASTER_ADDR": self.master_address,  # head-IP for NCCL/Gloo
@@ -388,7 +388,7 @@ class RayExecutor(RpcExecutorMixin, GenerationExecutor):
 
             return flat_pgs, flat_indices
 
-        bundle_indices = os.getenv("TRTLLM_RAY_BUNDLE_INDICES", None)
+        bundle_indices = TRTLLMENV.get("TRTLLM_RAY_BUNDLE_INDICES", None)
 
         if bundle_indices:
             pg = get_current_placement_group()

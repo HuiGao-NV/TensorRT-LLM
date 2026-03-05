@@ -3,7 +3,6 @@
 
 import asyncio
 import json
-import os
 import time
 import uuid
 # yapf: disable
@@ -41,6 +40,7 @@ from openai_harmony import (Author, Conversation, DeveloperContent,
 from transformers import AutoProcessor, PretrainedConfig
 
 from tensorrt_llm.bindings import steady_clock_now
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.executor import GenerationResult
 from tensorrt_llm.inputs.utils import apply_chat_template
 from tensorrt_llm.llmapi import SamplingParams
@@ -878,7 +878,7 @@ async def request_preprocess(
     prev_response_id = request.previous_response_id
 
     # TODO: better way to enable metrics
-    if len(os.getenv("TRTLLM_KVCACHE_TIME_OUTPUT_PATH", "")) > 0:
+    if len(TRTLLMENV.get("TRTLLM_KVCACHE_TIME_OUTPUT_PATH", "")) > 0:
         sampling_params.return_perf_metrics = True
 
     prev_msgs = []

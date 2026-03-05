@@ -1,5 +1,4 @@
 import math
-import os
 import platform
 import threading
 from typing import Dict, List, Optional, Tuple, Union
@@ -11,6 +10,7 @@ from tensorrt_llm._mnnvl_utils import HelixCpMnnvlMemory, MnnvlMemory
 from tensorrt_llm._torch.distributed.symm_mem_allreduce import \
     SymmetricMemoryAllReduce
 from tensorrt_llm._utils import mpi_comm, mpi_disabled
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.bindings import internal as _tllm_internal
 from tensorrt_llm.bindings.internal.runtime import McastGPUBuffer
 from tensorrt_llm.functional import (AllReduceFusionOp, AllReduceParams,
@@ -71,7 +71,7 @@ def get_or_scale_allreduce_mnnvl_workspace(
 
     # A safe method to get the element size of the dtype
     elem_size = torch.tensor([], dtype=dtype).element_size()
-    force_mn = os.environ.get("TRTLLM_FORCE_MNNVL_AR", "0") == "1"
+    force_mn = TRTLLMENV.get("TRTLLM_FORCE_MNNVL_AR", "0") == "1"
     use_fabric_handle = force_mn or mapping.is_multi_node()
 
     if mapping not in allreduce_mnnvl_workspaces or allreduce_mnnvl_workspaces[
@@ -543,7 +543,7 @@ class MNNVLAllReduce(nn.Module):
         arch = platform.machine().lower()
         is_on_aarch64 = "aarch64" in arch
         # Add a bypass so that we can run the unittest on single-node
-        is_testing = os.environ.get("TLLM_TEST_MNNVL", "0") == "1"
+        is_testing = TRTLLMENV.get("TLLM_TEST_MNNVL", "0") == "1"
         return is_testing or (dtype in MNNVLAllReduce.get_supported_dtypes() and
                               not mapping.has_cp() and mapping.is_multi_node()
                               and MnnvlMemory.supports_mnnvl()
@@ -832,7 +832,7 @@ class AllReduce(nn.Module):
 
         # In case that AutoTuner brings potential perf regression
         # TODO: Remove this if no perf regression is observed.
-        disable_allreduce_autotune = os.environ.get(
+        disable_allreduce_autotune = TRTLLMENV.get(
             "TLLM_DISABLE_ALLREDUCE_AUTOTUNE", "0") == "1"
 
         if allreduce_strategy == AllReduceStrategy.AUTO and not disable_allreduce_autotune and not self._disable_mpi:

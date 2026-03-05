@@ -21,6 +21,7 @@ import tensorrt_llm
 from tensorrt_llm._torch.distributed import Distributed
 from tensorrt_llm._utils import nvtx_range
 from tensorrt_llm.bindings.internal.runtime import delay_kernel
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 from tensorrt_llm.mapping import Mapping
 
@@ -618,7 +619,7 @@ class AutoTuner:
 
     def __init__(self, warmup=2, repeat=10, stream_delay_micro_secs=1000):
         # Increase log level for AutoTuner associated logger`
-        self._log_level_to_info = os.getenv(
+        self._log_level_to_info = TRTLLMENV.get(
             "TLLM_AUTOTUNER_LOG_LEVEL_DEBUG_TO_INFO", '0') == '1'
         self._debug_logger = logger.info if self._log_level_to_info else logger.debug
 
@@ -1103,7 +1104,7 @@ class AutoTuner:
 
         fewer_repeat_avg_time = pure_profile(stream, profile_fewer_repeat)
 
-        disable_short_profile = os.environ.get(
+        disable_short_profile = TRTLLMENV.get(
             "TLLM_AUTOTUNER_DISABLE_SHORT_PROFILE", "0") == "1"
         if fewer_repeat_avg_time > short_profile_threshold_ms and not disable_short_profile:
             # directly use the few repeat estimated time to avoid redundant profiling

@@ -3,7 +3,6 @@ import datetime
 import enum
 import hashlib
 import json
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +12,7 @@ import filelock
 
 import tensorrt_llm
 from tensorrt_llm.builder import BuildConfig
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.llmapi.utils import enable_llm_debug, print_colored
 from tensorrt_llm.logger import logger
 
@@ -21,8 +21,8 @@ def get_build_cache_config_from_env() -> tuple[bool, str]:
     """
     Get the build cache configuration from the environment variables
     """
-    build_cache_enabled = os.environ.get('TLLM_LLMAPI_BUILD_CACHE') == '1'
-    build_cache_root = os.environ.get(
+    build_cache_enabled = TRTLLMENV.get('TLLM_LLMAPI_BUILD_CACHE') == '1'
+    build_cache_root = TRTLLMENV.get(
         'TLLM_LLMAPI_BUILD_CACHE_ROOT',
         '/tmp/.cache/tensorrt_llm/llmapi/')  # nosec B108
     return build_cache_enabled, build_cache_root

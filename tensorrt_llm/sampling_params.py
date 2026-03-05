@@ -1,5 +1,4 @@
 import json
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 from typing import List, NamedTuple, Optional, Tuple, Union
@@ -9,6 +8,7 @@ from pydantic import BaseModel
 from strenum import StrEnum
 
 from tensorrt_llm.bindings import executor as tllme
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 
 
@@ -327,7 +327,7 @@ class SamplingParams:
             self.best_of is not None
             and self.best_of > 1
             and self._greedy_decoding
-            and not os.environ.get("TLLM_ALLOW_N_GREEDY_DECODING", None)
+            and not TRTLLMENV.get("TLLM_ALLOW_N_GREEDY_DECODING", None)
         ):
             raise ValueError(
                 f"Greedy decoding in the LLM API does not allow multiple "

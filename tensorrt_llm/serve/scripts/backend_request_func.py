@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import os
 import sys
 import time
 import traceback
@@ -14,6 +13,8 @@ import aiohttp
 from tqdm.asyncio import tqdm
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
 
@@ -182,7 +183,7 @@ async def async_request_openai_completions(
         payload["ignore_eos"] = request_func_input.ignore_eos
     if request_func_input.extra_body:
         payload.update(request_func_input.extra_body)
-    headers = {"Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"}
+    headers = {"Authorization": f"Bearer {TRTLLMENV.get('OPENAI_API_KEY')}"}
 
     output = RequestFuncOutput()
     output.prompt_len = request_func_input.prompt_len
@@ -325,7 +326,7 @@ async def async_request_openai_chat_completions(
         payload.update(request_func_input.extra_body)
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
+        "Authorization": f"Bearer {TRTLLMENV.get('OPENAI_API_KEY')}",
     }
 
     output = RequestFuncOutput()

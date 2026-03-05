@@ -1,5 +1,4 @@
 import gc
-import os
 import threading
 import time
 import traceback
@@ -9,6 +8,7 @@ from typing import List, Optional, Union
 
 import zmq
 
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 
 from .._utils import mpi_comm, mpi_rank, print_all_stacks
@@ -164,7 +164,7 @@ def worker_main(
             print_all_stacks()
 
     print_stacks_period = int(
-        os.getenv("TRTLLM_WORKER_PRINT_STACKS_PERIOD", "-1"))
+        TRTLLMENV.get("TRTLLM_WORKER_PRINT_STACKS_PERIOD", "-1"))
     if print_stacks_period > 0:
         print_stacks_thread = threading.Thread(target=_print_stacks,
                                                daemon=True)
@@ -178,7 +178,7 @@ def worker_main(
         # Any env overrides to the main process after tensorrt_llm import
         # may not get reflected in the spawned worker process, no matter how early,
         # unless we update it explicitly here.
-        os.environ.update(llm_args.env_overrides)
+        TRTLLMENV.update(llm_args.env_overrides)
 
     if llm_args is not None and llm_args.trust_remote_code:
         _init_hf_modules()
@@ -301,7 +301,7 @@ def worker_main(
         return
 
     # Optionally disable GC (default: not disabled)
-    if os.getenv("TRTLLM_WORKER_DISABLE_GC", "0") == "1":
+    if TRTLLMENV.get("TRTLLM_WORKER_DISABLE_GC", "0") == "1":
         gc.disable()
 
     with worker:

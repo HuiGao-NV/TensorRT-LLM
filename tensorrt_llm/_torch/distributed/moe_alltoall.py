@@ -7,7 +7,6 @@ with proper workspace management and synchronization.
 
 # ruff: noqa: E501
 
-import os
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -15,6 +14,7 @@ import torch
 
 from tensorrt_llm._mnnvl_utils import MnnvlMemory
 from tensorrt_llm.bindings import internal as _tllm_internal
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger as tllm_logger
 from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.math_utils import pad_up
@@ -120,7 +120,7 @@ class MoeAlltoAll:
             workspace_size_per_rank: Size of workspace per rank in bytes
         """
         # Check for environment variable override
-        workspace_mb_env = os.environ.get("TRTLLM_MOE_A2A_WORKSPACE_MB")
+        workspace_mb_env = TRTLLMENV.get("TRTLLM_MOE_A2A_WORKSPACE_MB")
         if workspace_mb_env:
             workspace_size_env = int(workspace_mb_env) * 1024 * 1024
             tllm_logger.warning(

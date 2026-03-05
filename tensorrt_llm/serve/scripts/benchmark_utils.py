@@ -11,6 +11,8 @@ from typing import Any, Optional
 import requests
 from tqdm.asyncio import tqdm
 
+from tensorrt_llm.env_utils import TRTLLMENV
+
 
 def convert_to_pytorch_benchmark_format(args: argparse.Namespace,
                                         metrics: dict[str, list],
@@ -21,7 +23,7 @@ def convert_to_pytorch_benchmark_format(args: argparse.Namespace,
     https://github.com/pytorch/pytorch/wiki/How-to-integrate-with-PyTorch-OSS-benchmark-database
     """
     records = []
-    if not os.environ.get("SAVE_TO_PYTORCH_BENCHMARK_FORMAT", False):
+    if not TRTLLMENV.get("SAVE_TO_PYTORCH_BENCHMARK_FORMAT", False):
         return records
 
     for name, benchmark_values in metrics.items():

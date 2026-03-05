@@ -1,4 +1,3 @@
-import os
 from typing import List, Optional
 
 import torch
@@ -11,6 +10,7 @@ from torch.fx import GraphModule
 
 import tensorrt_llm
 from tensorrt_llm import logger
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.mapping import Mapping
 
 from .multi_stream.auto_multi_stream import multi_stream_schedule
@@ -73,7 +73,7 @@ class Backend:
             if world_size > 1:
                 # Currently torch compile cannot work properly with lamport fusion kernel
                 # TO-DO: Fix this issue
-                os.environ["DISABLE_LAMPORT_REDUCE_NORM_FUSION"] = "1"
+                TRTLLMENV["DISABLE_LAMPORT_REDUCE_NORM_FUSION"] = "1"
                 ub_enabled = enable_userbuffers and tensorrt_llm.bindings.internal.userbuffers.ub_supported(
                 )
                 register_ar_fusions(cls._custom_pass_instances, mapping,

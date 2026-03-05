@@ -27,7 +27,6 @@
 
 import copy
 import math
-import os
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -40,6 +39,7 @@ from transformers import PretrainedConfig
 import tensorrt_llm.quantization.utils.fp4_utils as fp4_utils
 from tensorrt_llm._ipc_utils import can_access_peer
 from tensorrt_llm._utils import get_sm_version
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.functional import PositionEmbeddingType
 from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.models.modeling_utils import QuantConfig
@@ -1129,7 +1129,7 @@ class DeepseekV3DecoderLayer(DecoderLayer):
                 and self.mapping.tp_size > 1)
 
         self.fusion_config = EagerFusionConfig()
-        self.enable_fusion = os.environ.get(
+        self.enable_fusion = TRTLLMENV.get(
             "TRTLLM_DEEPSEEK_EAGER_FUSION_DISABLED", "0") == "0"
         self.enable_fusion &= not self.enable_attention_dp
 

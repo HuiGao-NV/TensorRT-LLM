@@ -29,6 +29,7 @@ from transformers.image_utils import (ImageInput, is_pil_image,
 from transformers.utils import TensorType
 
 from tensorrt_llm._utils import nvtx_range
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.inputs.multimodal import MultimodalParams
 
 from ...executor.request import LoRARequest
@@ -71,11 +72,11 @@ Phi4MMConfig = None
 
 # Make this a runtime lookup rather than a module-wide constant for easier unit testing.
 def _is_torch_compile() -> bool:
-    return os.getenv("TLLM_MULTIMODAL_ENCODER_TORCH_COMPILE", "0") == "1"
+    return TRTLLMENV.get("TLLM_MULTIMODAL_ENCODER_TORCH_COMPILE", "0") == "1"
 
 
 def _is_disagg() -> bool:
-    return os.getenv("TLLM_MULTIMODAL_DISAGGREGATED", "0") == "1"
+    return TRTLLMENV.get("TLLM_MULTIMODAL_DISAGGREGATED", "0") == "1"
 
 
 # Load the Phi4MM classes from HuggingFace Phi-4-multimodal-instruct repo.

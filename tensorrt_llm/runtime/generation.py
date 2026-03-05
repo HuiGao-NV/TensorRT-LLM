@@ -15,7 +15,6 @@
 
 import copy
 import math
-import os
 import platform
 from collections import Counter
 from dataclasses import dataclass, field
@@ -43,6 +42,7 @@ from tensorrt_llm.runtime.redrafter_utils import *
 from .._utils import (binding_layer_type_to_str, binding_to_str_dtype,
                       pad_vocab_size, str_dtype_to_torch, torch_to_numpy,
                       trt_dtype_to_torch)
+from ..env_utils import TRTLLMENV
 from ..bindings import ipc_nvls_allocate, ipc_nvls_free
 from ..layers import LanguageAdapterConfig
 from ..llmapi.kv_cache_type import KVCacheType
@@ -56,7 +56,7 @@ from .session import _scoped_stream
 
 # When variable is set, this will disable torch.cuda.set_device(...) calls
 # Useful in situations where device is already assigned by another library, i.e., megatron.
-DISABLE_TORCH_DEVICE_SET = os.environ.get("DISABLE_TORCH_DEVICE_SET", False)
+DISABLE_TORCH_DEVICE_SET = TRTLLMENV.get("DISABLE_TORCH_DEVICE_SET", False)
 
 
 def decode_words_list(word_dict: List[List[str]],

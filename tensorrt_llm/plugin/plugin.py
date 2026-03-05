@@ -14,7 +14,6 @@
 # limitations under the License.
 import argparse
 import ctypes
-import os
 import platform
 from collections import OrderedDict
 from enum import IntEnum
@@ -29,6 +28,7 @@ from pydantic import (BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo,
 
 from .._ipc_utils import IpcMemory, can_access_peer
 from .._utils import get_sm_version
+from ..env_utils import TRTLLMENV
 from ..bindings.internal.runtime import (lamport_initialize,
                                          lamport_initialize_all,
                                          max_workspace_size_lowprecision)
@@ -535,7 +535,7 @@ def add_plugin_argument(parser: argparse.ArgumentParser):
 
 
 def force_all_reduce_deterministic():
-    return os.getenv("FORCE_DETERMINISTIC", "0") == "1" or os.getenv(
+    return TRTLLMENV.get("FORCE_DETERMINISTIC", "0") == "1" or TRTLLMENV.get(
         "FORCE_ALL_REDUCE_DETERMINISTIC", "0") == "1"
 
 
@@ -602,12 +602,12 @@ class CustomAllReduceHelper:
         Override with TRTLLM_ALLREDUCE_FUSION_WORKSPACE_SIZE env var if needed for larger models.
         """
         if force_all_reduce_deterministic() and support_deterministic:
-            workspace_size = os.getenv("FORCE_ALLREDUCE_KERNEL_WORKSPACE_SIZE",
-                                       "1000000000")
+            workspace_size = TRTLLMENV.get("FORCE_ALLREDUCE_KERNEL_WORKSPACE_SIZE",
+                                           "1000000000")
             return int(workspace_size)
 
         # Allow override via environment variable for edge cases
-        workspace_size_env = os.getenv("TRTLLM_ALLREDUCE_FUSION_WORKSPACE_SIZE")
+        workspace_size_env = TRTLLMENV.get("TRTLLM_ALLREDUCE_FUSION_WORKSPACE_SIZE")
         if workspace_size_env:
             size = int(workspace_size_env)
             logger.info(

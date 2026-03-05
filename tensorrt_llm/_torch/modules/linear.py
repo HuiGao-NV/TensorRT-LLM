@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import enum
 import math
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
@@ -14,6 +13,7 @@ from torch.nn.parameter import Parameter
 
 import tensorrt_llm.quantization.utils.fp4_utils as fp4_utils
 from tensorrt_llm._torch.peft.lora.layer import LoraLayer
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm._utils import is_device_integrated, mpi_disabled
 from tensorrt_llm.bindings import ipc_nvls_supported
 from tensorrt_llm.functional import (AllReduceFusionOp, AllReduceParams,
@@ -574,7 +574,7 @@ class FP8QDQLinearMethod(LinearMethodBase):
         # Load k and v scales, used for NVFP4 KV cache
         k_scale, v_scale = self.load_kv_scales(weights)
         # NOTE: Currently the calibrated kv scales may cause overflow for certain input, disabling by default.
-        if os.environ.get("TRTLLM_LOAD_KV_SCALES", "0") == "1":
+        if TRTLLMENV.get("TRTLLM_LOAD_KV_SCALES", "0") == "1":
             if len(k_scale) != 0:
                 assert len(v_scale) != 0
                 # The calibrated KV scales are amax / (6 * 448), but the requested KV scales are amax / 448,
@@ -1093,7 +1093,7 @@ class NVFP4LinearMethod(LinearMethodBase):
         # Load k and v scales, used for NVFP4 KV cache
         k_scale, v_scale = self.load_kv_scales(weights)
         # NOTE: Currently the calibrated kv scales may cause overflow for certain input, disabling by default.
-        if os.environ.get("TRTLLM_LOAD_KV_SCALES", "0") == "1":
+        if TRTLLMENV.get("TRTLLM_LOAD_KV_SCALES", "0") == "1":
             if len(k_scale) != 0:
                 assert len(v_scale) != 0
                 # The calibrated KV scales are amax / (6 * 448), but the requested KV scales are amax / 448,

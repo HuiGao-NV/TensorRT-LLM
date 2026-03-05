@@ -1,6 +1,5 @@
 import copy
 import dataclasses
-import os
 from typing import List, Optional, Tuple
 
 import torch
@@ -9,6 +8,7 @@ from transformers import (AutoProcessor, AutoTokenizer, Gemma3Config,
 
 from tensorrt_llm._torch.models.checkpoints.base_weight_mapper import \
     BaseWeightMapper
+from tensorrt_llm.env_utils import TRTLLMENV
 
 from ..._utils import nvtx_range
 from ...inputs import (BaseMultimodalDummyInputsBuilder,
@@ -32,7 +32,7 @@ _MULTIMODAL_ENV_NAME = "TLLM_MULTIMODAL_DISAGGREGATED"
 
 # Make this a runtime lookup rather than a module-wide constant for easier unit testing.
 def _is_disagg() -> bool:
-    return os.getenv(_MULTIMODAL_ENV_NAME, "0") == "1"
+    return TRTLLMENV.get(_MULTIMODAL_ENV_NAME, "0") == "1"
 
 
 class Gemma3InputProcessor(BaseMultimodalInputProcessor,

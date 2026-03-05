@@ -33,6 +33,7 @@ import tensorrt_llm
 import tensorrt_llm.models.modeling_utils as tllm_utils
 from tensorrt_llm._utils import (np_bfloat16, numpy_to_torch,
                                  str_dtype_to_torch, torch_to_numpy)
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 from tensorrt_llm.models.convert_utils import load_calib_dataset
 from tensorrt_llm.models.gemma.config import GemmaConfig
@@ -59,7 +60,7 @@ class JAXParser:
                         checkpoint_path: Path,
                         load_model_on_cpu: bool = False) -> Weights:
         checkpoint_path = checkpoint_path.absolute()
-        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+        TRTLLMENV["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
         return gemma_params.nest_params(
             gemma_params.param_remapper(
                 gemma_params.load_params(checkpoint_path)))

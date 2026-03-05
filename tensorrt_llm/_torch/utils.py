@@ -1,5 +1,4 @@
 import contextlib
-import os
 import threading
 from dataclasses import dataclass
 from enum import Enum, IntEnum
@@ -9,6 +8,7 @@ import torch
 from torch.nn import functional as F
 
 from tensorrt_llm._utils import TensorWrapper, convert_to_torch_tensor
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.math_utils import ceil_div, pad_up
 from tensorrt_llm.quantization.utils import fp4_utils
@@ -341,7 +341,7 @@ def create_lm_head_tp_mapping(mapping: Mapping, token_count: int) -> Mapping:
     # TODO: On platforms like GB200, setting lm_head_tp_size_upper_bound to world_size could be more efficient when world_size > gpus_per_node, we need to do further investigation.
     lm_head_tp_size_upper_bound = min(mapping.world_size, mapping.gpus_per_node)
     lm_head_tp_size = int(
-        os.getenv(
+        TRTLLMENV.get(
             'LM_HEAD_TP_SIZE',
             nearest_in_buckets(lm_head_tp_size_raw,
                                [1, lm_head_tp_size_upper_bound])))

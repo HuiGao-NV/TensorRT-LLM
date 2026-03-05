@@ -1,10 +1,11 @@
 # Adapted from https://github.com/fla-org/flash-linear-attention/blob/main/fla/utils.py
 import inspect
-import os
 
 import triton
 
-FLA_CACHE_RESULTS = os.getenv("FLA_CACHE_RESULTS", "1") == "1"
+from tensorrt_llm.env_utils import TRTLLMENV
+
+FLA_CACHE_RESULTS = TRTLLMENV.get("FLA_CACHE_RESULTS", "1") == "1"
 
 
 supports_autotune_cache = "cache_results" in inspect.signature(triton.autotune).parameters

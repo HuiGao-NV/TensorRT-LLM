@@ -16,6 +16,8 @@ import argparse
 import copy
 import os
 import time
+
+from tensorrt_llm.env_utils import TRTLLMENV
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from importlib.machinery import SourceFileLoader
@@ -500,7 +502,7 @@ def main():
         # optimization profiles during TRT build.
         # BUILDER_FORCE_NUM_PROFILES must be less than or equal to the number of
         # optimization profiles set by model's prepare_inputs().
-        force_num_profiles_from_env = os.environ.get(
+        force_num_profiles_from_env = TRTLLMENV.get(
             "BUILDER_FORCE_NUM_PROFILES", None)
         if force_num_profiles_from_env is not None:
             logger.warning(

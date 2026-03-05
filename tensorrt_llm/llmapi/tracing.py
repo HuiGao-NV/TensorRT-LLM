@@ -9,7 +9,6 @@ __all__ = [
 ]
 
 import functools
-import os
 import typing
 from collections.abc import Mapping
 from typing import Optional
@@ -17,6 +16,7 @@ from typing import Optional
 from strenum import StrEnum
 
 from tensorrt_llm._utils import run_once
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.logger import logger
 
 # Adapted from https://github.com/vllm-project/vllm/blob/v0.10.0rc1/vllm/tracing.py#L11
@@ -77,7 +77,7 @@ def init_tracer(instrumenting_module_name: str,
 
 
 def get_span_exporter(endpoint):
-    protocol = os.environ.get(OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, "grpc")
+    protocol = TRTLLMENV.get(OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, "grpc")
     if protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
             OTLPSpanExporter

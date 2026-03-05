@@ -1,6 +1,5 @@
 import copy
 import inspect
-import os
 import traceback
 from typing import Callable, Optional, Tuple
 
@@ -9,6 +8,7 @@ import torch
 from tensorrt_llm._torch.models.checkpoints.base_checkpoint_loader import (
     AutoCheckpointMapper, BaseCheckpointLoader)
 from tensorrt_llm._utils import str_dtype_to_torch
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.llmapi.llm_args import TorchLlmArgs
 from tensorrt_llm.logger import logger
 from tensorrt_llm.lora_helper import LoraConfig
@@ -373,8 +373,8 @@ class ModelLoader:
             config, self.llm_args.kv_cache_config.mamba_ssm_cache_dtype)
 
         # Allow overriding the number of layers via environment variable
-        num_layers_override = int(os.environ.get("TLLM_OVERRIDE_LAYER_NUM",
-                                                 "0"))
+        num_layers_override = int(TRTLLMENV.get("TLLM_OVERRIDE_LAYER_NUM",
+                                               "0"))
         if num_layers_override > 0:
             config.pretrained_config.num_hidden_layers = num_layers_override
             for sub_config in ["text_config", "vision_config"]:

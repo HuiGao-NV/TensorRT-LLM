@@ -1,7 +1,6 @@
 import contextlib
 import inspect
 import math
-import os
 import time
 from dataclasses import dataclass
 from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
@@ -13,6 +12,7 @@ from torch.utils._pytree import tree_any_only
 from tqdm import tqdm
 
 from tensorrt_llm._utils import local_mpi_rank
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.lora_manager import HfLoraLoader
 from tensorrt_llm.models.convert_utils import split_matrix_tp
 
@@ -934,8 +934,8 @@ def _load_weights_impl(model: Union[nn.Module, DecoderModelForCausalLM],
                             if n in module_weights:
                                 p.data.copy_(module_weights[n][:])
 
-    if os.environ.get("TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL",
-                      "False") in ["True", "true", "1", "yes", "y"]:
+    if TRTLLMENV.get("TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL",
+                     "False") in ["True", "true", "1", "yes", "y"]:
         for name, module in tqdm(list(
                 model.named_modules(remove_duplicate=False)),
                                  desc="Loading weights"):
@@ -1039,8 +1039,8 @@ def _load_weights_impl_v2(model: Union[nn.Module, DecoderModelForCausalLM],
                                 p,
                                 allow_partial_loading=allow_partial_loading)
 
-    if os.environ.get("TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL",
-                      "False") in ["True", "true", "1", "yes", "y"]:
+    if TRTLLMENV.get("TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL",
+                     "False") in ["True", "true", "1", "yes", "y"]:
         for name, module in tqdm(list(
                 model.named_modules(remove_duplicate=False)),
                                  desc="Loading weights"):

@@ -1,5 +1,4 @@
 import math
-import os
 import weakref
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, List, Optional, Tuple
@@ -13,6 +12,7 @@ if TYPE_CHECKING:
 
 from tensorrt_llm._utils import get_sm_version
 from tensorrt_llm.bindings.internal import thop
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.functional import AttentionMaskType
 from tensorrt_llm.llmapi import SkipSoftmaxAttentionConfig
 from tensorrt_llm.logger import logger
@@ -156,7 +156,7 @@ class TrtllmAttentionWrapper:
                                              dtype=torch.uint32,
                                              device='cuda')
         # Default disabled, but allow manual enabling through `TRTLLM_PRINT_SKIP_SOFTMAX_STAT=1`
-        self.print_skip_softmax_stat = os.environ.get(
+        self.print_skip_softmax_stat = TRTLLMENV.get(
             "TRTLLM_PRINT_SKIP_SOFTMAX_STAT", "0") == "1"
 
     def update_quant_config(self, quant_config: Optional[QuantConfig] = None):
@@ -1559,7 +1559,7 @@ class TrtllmAttention(AttentionBackend[TrtllmAttentionMetadata]):
             return False
 
         # Default enabled, but allow manual disabling through `TRTLLM_ENABLE_ATTENTION_NVFP4_OUTPUT=0`
-        if not os.environ.get("TRTLLM_ENABLE_ATTENTION_NVFP4_OUTPUT",
+        if not TRTLLMENV.get("TRTLLM_ENABLE_ATTENTION_NVFP4_OUTPUT",
                               "1") == "1":
             return False
 

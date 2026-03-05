@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
-import os
 from typing import Iterable, List, Optional, Union
 
 import click
@@ -23,6 +22,7 @@ import numpy as np
 
 from .. import LLM as PyTorchLLM
 from .._tensorrt_engine import LLM
+from ..env_utils import TRTLLMENV
 from ..llmapi import RequestOutput
 from ..logger import logger
 from ..sampling_params import GuidedDecodingParams, SamplingParams
@@ -61,7 +61,7 @@ class JsonModeEval(Evaluator):
             if i >= self.num_samples:
                 break
             schema = sample["schema"]
-            if os.environ.get("TRTLLM_XGUIDANCE_LENIENT") == "1":
+            if TRTLLMENV.get("TRTLLM_XGUIDANCE_LENIENT") == "1":
                 schema = json.loads(schema)
                 schema["x-guidance"] = {"lenient": True}
                 schema = json.dumps(schema)

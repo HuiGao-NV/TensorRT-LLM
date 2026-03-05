@@ -1,11 +1,12 @@
 import json
-import os
 import pathlib
 from collections import deque
 from contextlib import contextmanager
 from typing import Callable, Collection, Deque
 
 import torch
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 from .logger import ad_logger
 
@@ -95,7 +96,7 @@ def benchmark(
     for _ in range(1):
         func()
 
-    use_nsys_profiling = bool(os.environ.get("NSYS_PROFILING_SESSION_ID", None))
+    use_nsys_profiling = bool(TRTLLMENV.get("NSYS_PROFILING_SESSION_ID", None))
     if use_nsys_profiling:
         torch.cuda.cudart().cudaProfilerStart()
         func()

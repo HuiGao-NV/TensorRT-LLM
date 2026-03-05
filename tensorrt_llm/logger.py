@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-import os
 import sys
 from typing import Optional
 
 import tensorrt as trt
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 try:
     from polygraphy.logger import G_LOGGER
@@ -47,7 +48,7 @@ class Logger(metaclass=Singleton):
     DEBUG = "[D]"
 
     def __init__(self):
-        environ_severity = os.environ.get(self.ENV_VARIABLE)
+        environ_severity = TRTLLMENV.get(self.ENV_VARIABLE)
         self._set_from_env = environ_severity is not None
 
         self.rank: Optional[int] = None

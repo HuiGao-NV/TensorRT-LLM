@@ -15,8 +15,10 @@
 
 import os
 
+from tensorrt_llm.env_utils import TRTLLMENV
+
 # Disable UCC to WAR allgather issue before NGC PyTorch 25.12 upgrade.
-os.environ["OMPI_MCA_coll_ucc_enable"] = "0"
+TRTLLMENV["OMPI_MCA_coll_ucc_enable"] = "0"
 
 
 def _add_trt_llm_dll_directory():

@@ -21,12 +21,12 @@ This module implements the NVLINK two-sided comm AllToAll communication method f
 NVLINK Two-Sided supports post-quant dispatch for all quantization modes.
 """
 
-import os
 from typing import List, Optional, Tuple
 
 import torch
 
 from tensorrt_llm._mnnvl_utils import MnnvlMemory, MnnvlMoe
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.mapping import Mapping
 
 from .base import Communication
@@ -62,7 +62,7 @@ class NVLinkTwoSided(Communication):
         self.alltoall_result_do_sum = alltoall_result_do_sum
         # Read from environment variable, same as wideEP
         self.enable_postquant_alltoall = (
-            os.environ.get("TRTLLM_MOE_POST_QUANT_ALLTOALLV", "1") == "1"
+            TRTLLMENV.get("TRTLLM_MOE_POST_QUANT_ALLTOALLV", "1") == "1"
         )
 
         # Invalid token expert ID (default to -1), the kernels in TRTLLM-gen is hard-coded to support -1 only.

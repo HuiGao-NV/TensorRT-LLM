@@ -2,6 +2,8 @@ import copy
 import functools
 import os
 import time
+
+from tensorrt_llm.env_utils import TRTLLMENV
 from collections import defaultdict
 from typing import Dict, Optional
 
@@ -695,7 +697,7 @@ def quantize(hf_model_dir: str,
             torch, config.dtype),
         device_map=device_map)
 
-    os.environ["TOKENIZERS_PARALLELISM"] = os.environ.get(
+    TRTLLMENV["TOKENIZERS_PARALLELISM"] = TRTLLMENV.get(
         "TOKENIZERS_PARALLELISM", "false")
     tokenizer = AutoTokenizer.from_pretrained(
         hf_model_dir,

@@ -14,13 +14,14 @@
 # limitations under the License.
 import contextlib
 import ctypes
-import os
 import platform
 import threading
 import time
 from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 import numpy as np
 
@@ -54,7 +55,7 @@ def _init(log_level: object = None) -> None:
     if log_level is not None:
         logger.set_level(log_level)
 
-    if os.getenv("TRT_LLM_NO_LIB_INIT", "0") == "1":
+    if TRTLLMENV.get("TRT_LLM_NO_LIB_INIT", "0") == "1":
         logger.info("Skipping TensorRT LLM init.")
         return
 
@@ -91,7 +92,7 @@ def _init(log_level: object = None) -> None:
             logger.error(f"Printing stacks {counter} times")
             print_all_stacks()
 
-    print_stacks_period = int(os.getenv("TRTLLM_PRINT_STACKS_PERIOD", "-1"))
+    print_stacks_period = int(TRTLLMENV.get("TRTLLM_PRINT_STACKS_PERIOD", "-1"))
     if print_stacks_period > 0:
         print_stacks_thread = threading.Thread(target=_print_stacks, daemon=True)
         print_stacks_thread.start()
@@ -207,10 +208,10 @@ def get_scalar_from_field(field):
 
 class _BuildingFlag:
     def __enter__(self):
-        os.environ["IS_BUILDING"] = "1"
+        TRTLLMENV["IS_BUILDING"] = "1"
 
     def __exit__(self, type, value, tb):
-        del os.environ["IS_BUILDING"]
+        del TRTLLMENV["IS_BUILDING"]
 
 
 def _is_building(f):

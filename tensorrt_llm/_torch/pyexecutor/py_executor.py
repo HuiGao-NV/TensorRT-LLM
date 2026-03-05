@@ -1,7 +1,6 @@
 import dataclasses
 import datetime
 import functools
-import os
 import pickle  # nosec B403
 import threading
 import time
@@ -23,6 +22,7 @@ from tensorrt_llm._torch.pyexecutor.resource_manager import (
     ResourceManagerType, request_context)
 from tensorrt_llm._utils import (customized_gc_thresholds, is_trace_enabled,
                                  nvtx_range, trace_func)
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.bindings.executor import (DisServingRequestStats,
                                             FinishReason, InflightBatchingStats,
                                             IterationStats, KvCacheStats,
@@ -74,7 +74,7 @@ PP_COMM_TAG_SAMPLE_STATE_BASE = 21001
 
 @functools.cache
 def _load_iteration_indexes(env_var: str):
-    spans = os.environ.get(env_var, None)
+    spans = TRTLLMENV.get(env_var, None)
     starts, stops = [], []
 
     if spans:
@@ -241,7 +241,7 @@ class PyExecutor:
         self.has_previous_draft_tokens = False
         self.num_scheduled_requests: int = 0
         self.benchmark_req_queues_size = int(
-            os.environ.get("TLLM_BENCHMARK_REQ_QUEUES_SIZE", 0))
+            TRTLLMENV.get("TLLM_BENCHMARK_REQ_QUEUES_SIZE", 0))
 
         # list of requests in each PP micro batch
         self.num_micro_batches = self.dist.pp_size
@@ -251,7 +251,7 @@ class PyExecutor:
         # schedule handle for PP to propagate the first PP rank's schedule result
         self.send_schedule_handler = None
         self.pp_scheduler_max_retry_count = int(
-            os.environ.get("TLLM_PP_SCHEDULER_MAX_RETRY_COUNT", 10))
+            TRTLLMENV.get("TLLM_PP_SCHEDULER_MAX_RETRY_COUNT", 10))
         self.sample_stream = torch.cuda.Stream()
         self.start_sample_event = torch.cuda.Event()
         self.finish_sample_event = torch.cuda.Event()
@@ -582,9 +582,9 @@ class PyExecutor:
         end_event_2 = torch.cuda.Event(enable_timing=True)
         prev_device_step_time = None
 
-        torch_trace_path = os.environ.get(PROFILE_TRACE_ENV_VAR_NAME, None)
-        profile_start_stop = os.environ.get(PROFILE_START_STOP_ENV_VAR_NAME,
-                                            None)
+        torch_trace_path = TRTLLMENV.get(PROFILE_TRACE_ENV_VAR_NAME, None)
+        profile_start_stop = TRTLLMENV.get(PROFILE_START_STOP_ENV_VAR_NAME,
+                                           None)
         enable_torch_trace = bool(torch_trace_path and profile_start_stop)
         if torch_trace_path and profile_start_stop is None:
             logger.warning(
@@ -1094,8 +1094,8 @@ class PyExecutor:
                                 guided_decoder_failed_requests = self.guided_decoder.execute(
                                     batch_outputs['logits'])
 
-                            if os.environ.get("TRTLLM_PP_MULTI_STREAM_SAMPLE",
-                                              "1") == "1":
+                            if TRTLLMENV.get("TRTLLM_PP_MULTI_STREAM_SAMPLE",
+                                             "1") == "1":
                                 # Wait for the previous sample to finish.
                                 self.finish_sample_event.wait()
                                 # Copy the batch outputs as sampler inputs
@@ -2194,12 +2194,12 @@ class PyExecutor:
     def _recv_disagg_gen_cache(self, new_gen_reqs):
 
         # For gen-only benchmarking, mark new gen request as transmission complete right away
-        if os.getenv("TRTLLM_DISAGG_BENCHMARK_GEN_ONLY") == "1":
+        if TRTLLMENV.get("TRTLLM_DISAGG_BENCHMARK_GEN_ONLY") == "1":
             for req in new_gen_reqs:
                 req.state = LlmRequestState.DISAGG_GENERATION_TRANS_COMPLETE
             return
 
-        if os.getenv("TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP") == "1":
+        if TRTLLMENV.get("TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP") == "1":
             for req in new_gen_reqs:
                 self.kv_cache_transceiver.request_and_receive_sync(req)
         else:

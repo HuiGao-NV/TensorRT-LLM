@@ -1,6 +1,5 @@
 import gc
 import importlib
-import os
 from functools import wraps
 from pathlib import Path
 from queue import Queue
@@ -10,6 +9,7 @@ import ray
 import torch
 
 from tensorrt_llm._ray_utils import control_action_decorator
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm._torch.utils import get_device_uuid
 from tensorrt_llm._torch.virtual_memory import (materialize_with_tag,
                                                 release_with_tag,
@@ -43,7 +43,7 @@ def resolve_obj_by_qualname(qualname: str) -> Any:
 class RayWorkerWrapper:
 
     def __init__(self, worker_cls, worker_kwargs, world_size, rank):
-        self.master_address = os.environ["MASTER_ADDR"]
+        self.master_address = TRTLLMENV["MASTER_ADDR"]
         self.world_size = world_size
         self.rank = rank
         # Ray can't pickle TensorRT logger
@@ -167,7 +167,7 @@ class RayWorkerWrapper:
 
     @staticmethod
     def physical_to_local_id(phys_id: int) -> int:
-        visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+        visible_devices = TRTLLMENV.get("CUDA_VISIBLE_DEVICES")
         if not visible_devices:
             return phys_id
         id_mapping = list(map(int, visible_devices.split(",")))

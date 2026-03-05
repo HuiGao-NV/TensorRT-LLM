@@ -1,7 +1,6 @@
 """Common utilities for distributed inference."""
 
 import atexit
-import os
 import sys
 from typing import Callable, List, Optional, Tuple
 
@@ -10,6 +9,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 from tensorrt_llm._utils import get_free_port
+from tensorrt_llm.env_utils import TRTLLMENV
 
 from ..utils.logger import ad_logger
 
@@ -101,12 +101,12 @@ def initialize_or_skip(
 
 def is_ompi():
     """Check whether multi-processing was initialized with explicitly calling mpirun."""
-    return "OMPI_COMM_WORLD_SIZE" in os.environ
+    return "OMPI_COMM_WORLD_SIZE" in TRTLLMENV
 
 
 def is_torchelastic():
     """Check whether multi-processing was initialized with torchelastic."""
-    return "TORCHELASTIC_RUN_ID" in os.environ
+    return "TORCHELASTIC_RUN_ID" in TRTLLMENV
 
 
 def is_initialized():
@@ -122,11 +122,11 @@ def cleanup():
 
 def _set_distributed_env_vars(local_rank: int, world_size: int, port: int) -> None:
     """Set environment variables required by NCCL's env:// init method."""
-    os.environ["RANK"] = str(local_rank)
-    os.environ["WORLD_SIZE"] = str(world_size)
-    os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = str(port)
-    os.environ["LOCAL_RANK"] = str(local_rank)
+    TRTLLMENV["RANK"] = str(local_rank)
+    TRTLLMENV["WORLD_SIZE"] = str(world_size)
+    TRTLLMENV["MASTER_ADDR"] = "127.0.0.1"
+    TRTLLMENV["MASTER_PORT"] = str(port)
+    TRTLLMENV["LOCAL_RANK"] = str(local_rank)
 
 
 def _try_init_process_group(local_rank: int, world_size: int, port: int) -> bool:
@@ -169,13 +169,13 @@ def initialize(
     """
     if is_ompi():
         lib = "OMPI"
-        local_rank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
-        world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
+        local_rank = int(TRTLLMENV["OMPI_COMM_WORLD_LOCAL_RANK"])
+        world_size = int(TRTLLMENV["OMPI_COMM_WORLD_SIZE"])
     elif is_torchelastic():
         lib = "TORCHELASTIC"
-        local_rank = int(os.environ["LOCAL_RANK"])
-        world_size = int(os.environ["WORLD_SIZE"])
-        port = int(os.environ["MASTER_PORT"])
+        local_rank = int(TRTLLMENV["LOCAL_RANK"])
+        world_size = int(TRTLLMENV["WORLD_SIZE"])
+        port = int(TRTLLMENV["MASTER_PORT"])
     else:
         lib = "MP"
         local_rank = rank

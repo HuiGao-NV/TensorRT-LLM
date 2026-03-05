@@ -15,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from typing import Dict, List, Optional
 
 import torch
@@ -31,6 +30,7 @@ from tensorrt_llm._torch.modules.fla.chunk import chunk_gated_delta_rule
 from tensorrt_llm._torch.modules.fla.fused_sigmoid_gating_recurrent import \
     fused_sigmoid_gating_delta_rule_update
 from tensorrt_llm._torch.modules.mamba.mamba2_metadata import Mamba2Metadata
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.mapping import Mapping
 
 from ..attention_backend import AttentionMetadata
@@ -871,8 +871,8 @@ class Qwen3NextLinearDecoderLayer(DecoderLayer):
 
         self.fusion_config = EagerFusionConfig()
         ### TODO: enable eager_fusion by default
-        self.enable_fusion = os.environ.get(
-            "TRTLLM_QWEN3_EAGER_FUSION_DISABLED", "1") == "0"
+        self.enable_fusion = TRTLLMENV.get(
+            "TRTLLM_QWEN3_EAGER_FUSION_DISABLED", "0") == "0"
         self.enable_fusion &= not self.enable_attention_dp
 
         # has_tp = self.mapping.has_tp()
@@ -1030,7 +1030,7 @@ class Qwen3NextFullAttentionDecoderLayer(DecoderLayer):
         self.next_layer_layernorm: RMSNorm = None
 
         self.fusion_config = EagerFusionConfig()
-        self.enable_fusion = os.environ.get(
+        self.enable_fusion = TRTLLMENV.get(
             "TRTLLM_QWEN3_EAGER_FUSION_DISABLED", "0") == "0"
         self.enable_fusion &= not self.enable_attention_dp
 

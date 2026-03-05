@@ -4,6 +4,8 @@ import os
 import sys
 from typing import Dict, List, NamedTuple, Optional
 
+from tensorrt_llm.env_utils import TRTLLMENV
+
 import torch
 import torch.nn as nn
 import triton
@@ -12,7 +14,7 @@ import triton.language as tl
 IS_TRITON_KERNELS_AVAILABLE = False
 # We expect to find triton_kernels under $TRITON_ROOT/python/triton_kernels
 # Triton upstream commit f3067cd3bd0c29065fa4ecdb724b6f29cbabea5f has been verified.
-triton_root = os.getenv('TRITON_ROOT')
+triton_root = TRTLLMENV.get('TRITON_ROOT')
 if triton_root:
     triton_root = os.path.abspath(
         os.path.join(triton_root, 'python', 'triton_kernels'))
@@ -629,7 +631,7 @@ def swizzle_weight_and_scale(w: torch.Tensor, w_scale: torch.Tensor):
     assert w_shape[2] == w_scale_shape[2]
     w = maybe_update_stride(w)
     #num_warps = 4 if batch <= 512 else 8
-    num_warps = int(os.getenv("TRITON_MOE_MXFP4_NUM_WARPS", 4))
+    num_warps = int(TRTLLMENV.get("TRITON_MOE_MXFP4_NUM_WARPS", 4))
     assert num_warps in [4, 8], \
         f"TRITON_MOE_MXFP4_NUM_WARPS should be 4 or 8, got {num_warps}"
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(

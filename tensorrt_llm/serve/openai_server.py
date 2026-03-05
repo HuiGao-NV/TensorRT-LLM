@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import asyncio
-import os
 import re
 import signal
 import socket
@@ -21,6 +20,7 @@ from starlette.routing import Mount
 from transformers import AutoProcessor
 
 from tensorrt_llm._tensorrt_engine import LLM
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm._torch.async_llm import AsyncLLM
 # yapf: disable
 from tensorrt_llm.executor import CppExecutorError
@@ -121,7 +121,7 @@ class OpenAIServer:
             self.model_config = None
 
         # Enable response storage for Responses API
-        self.enable_store = (len(os.getenv("TRTLLM_RESPONSES_API_DISABLE_STORE", "")) < 1) and not self.postproc_worker_enabled
+        self.enable_store = (len(TRTLLMENV.get("TRTLLM_RESPONSES_API_DISABLE_STORE", "")) < 1) and not self.postproc_worker_enabled
 
         self.conversation_store = ConversationHistoryStore()
 
@@ -148,7 +148,7 @@ class OpenAIServer:
 
         # gpt-oss
         self.harmony_adapter: HarmonyAdapter | None = None
-        disable_harmony = os.getenv("DISABLE_HARMONY_ADAPTER", "0") == "1"
+        disable_harmony = TRTLLMENV.get("DISABLE_HARMONY_ADAPTER", "0") == "1"
         if disable_harmony:
             self.use_harmony = False
         else:
@@ -795,7 +795,7 @@ class OpenAIServer:
             sampling_params = request.to_sampling_params(
                 vocab_size=self.tokenizer.tokenizer.vocab_size)
             # TODO: better way to enable metrics
-            if len(os.getenv("TRTLLM_KVCACHE_TIME_OUTPUT_PATH", "")) > 0:
+            if len(TRTLLMENV.get("TRTLLM_KVCACHE_TIME_OUTPUT_PATH", "")) > 0:
                 sampling_params.return_perf_metrics = True
             disaggregated_params = to_llm_disaggregated_params(request.disaggregated_params)
             for idx, prompt in enumerate(prompts):

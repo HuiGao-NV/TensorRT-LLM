@@ -1,5 +1,4 @@
 import math
-import os
 import weakref
 from dataclasses import dataclass, field
 from typing import Dict, Literal, Optional
@@ -9,6 +8,7 @@ import torch
 from flashinfer.jit.core import check_cuda_arch
 from typing_extensions import Self
 
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.functional import AttentionMaskType
 from tensorrt_llm.models.modeling_utils import QuantConfig
 
@@ -23,7 +23,7 @@ except RuntimeError:
     # since the existed TORCH_CUDA_ARCH_LIST may be too general and flashinfer requires sm75+.
     capability = torch.cuda.get_device_capability()
     arch_list = f"{capability[0]}.{capability[1]}"
-    os.environ["TORCH_CUDA_ARCH_LIST"] = arch_list
+    TRTLLMENV["TORCH_CUDA_ARCH_LIST"] = arch_list
 
 
 @dataclass(kw_only=True, frozen=True)

@@ -1,7 +1,8 @@
-import os
 from typing import Dict, List, Optional
 
 import torch
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 import tensorrt_llm
 import tensorrt_llm.bindings.executor as trtllm
@@ -1048,7 +1049,7 @@ def _adjust_torch_mem_fraction():
     #     torch.cuda._set_allocator_settings (added in PyTorch 2.8.0-rc1)
     #   or a similar API is available, the warning below should be removed
     #   and the allocator GC threshold be set via the new API instead.
-    torch_allocator_config = os.environ.get("PYTORCH_ALLOC_CONF", "")
+    torch_allocator_config = TRTLLMENV.get("PYTORCH_ALLOC_CONF", "")
     torch_mem_threshold_advised = (
         torch.cuda.get_allocator_backend() == "native"
         and "expandable_segments:True" not in torch_allocator_config)

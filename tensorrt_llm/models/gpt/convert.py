@@ -19,6 +19,8 @@ import os
 import shutil
 import tarfile
 import time
+
+from tensorrt_llm.env_utils import TRTLLMENV
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -881,7 +883,7 @@ def quantize(hf_model_dir: str,
         dtype='auto' if not use_smooth_quant else torch.float16,
         trust_remote_code=trust_remote_code)
 
-    os.environ["TOKENIZERS_PARALLELISM"] = os.environ.get(
+    TRTLLMENV["TOKENIZERS_PARALLELISM"] = TRTLLMENV.get(
         "TOKENIZERS_PARALLELISM", "false")
     tokenizer = AutoTokenizer.from_pretrained(
         hf_model_dir,

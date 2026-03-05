@@ -20,12 +20,12 @@ This module implements the DeepEP Low Latency communication method for MoE.
 DeepEP Low Latency is optimized for small token counts with minimal communication overhead.
 """
 
-import os
 from typing import List, Optional, Tuple
 
 import torch
 
 from tensorrt_llm._torch.modules.fused_moe.deep_ep_utils import buffer_pool, deep_ep_installed
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.models.modeling_utils import QuantConfig
 
@@ -64,19 +64,19 @@ class DeepEPLowLatency(Communication):
         )
         # Read from environment variable, same as wideEP
         self.enable_postquant_alltoall = (
-            os.environ.get("TRTLLM_MOE_POST_QUANT_ALLTOALLV", "1") == "1"
+            TRTLLMENV.get("TRTLLM_MOE_POST_QUANT_ALLTOALLV", "1") == "1"
         )
 
         # Calculate deep_ep_max_num_tokens
         assert moe_max_num_tokens is not None
         default_limit = min(max_num_tokens, moe_max_num_tokens)
         self.deep_ep_max_num_tokens = int(
-            os.environ.get("TRTLLM_DEEP_EP_TOKEN_LIMIT", str(default_limit))
+            TRTLLMENV.get("TRTLLM_DEEP_EP_TOKEN_LIMIT", str(default_limit))
         )
 
         # Set nvshmem queue pair depth larger than the number of on-flight WRs
         # (ref: https://github.com/deepseek-ai/DeepEP/issues/427)
-        os.environ["NVSHMEM_QP_DEPTH"] = str(2 * (self.deep_ep_max_num_tokens + 1))
+        TRTLLMENV["NVSHMEM_QP_DEPTH"] = str(2 * (self.deep_ep_max_num_tokens + 1))
 
         self.deep_ep_buffer = buffer_pool.get_low_latency_buffer(mapping)
         self.deep_ep_buffer.reserve(self.deep_ep_max_num_tokens, hidden_size, num_slots)
@@ -86,7 +86,7 @@ class DeepEPLowLatency(Communication):
         """
         Check if DeepEP Low Latency is supported on the current platform
         """
-        if os.environ.get("TRTLLM_CAN_USE_DEEP_EP", "0") != "1":
+        if TRTLLMENV.get("TRTLLM_CAN_USE_DEEP_EP", "0") != "1":
             return False
         if not deep_ep_installed:
             return False

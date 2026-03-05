@@ -1,4 +1,3 @@
-import os
 import weakref
 from abc import abstractmethod
 from enum import Enum, IntEnum
@@ -6,6 +5,8 @@ from typing import Dict, List, Optional, Tuple, Union, final
 
 import torch
 from torch import nn
+
+from tensorrt_llm.env_utils import TRTLLMENV
 
 from ...distributed.ops import reducescatter
 from ...model_config import ModelConfig
@@ -202,7 +203,7 @@ class MoE(nn.Module):
 
         self.all_reduce = None
         # Debug function for eliminating imbalance during performance analysis.
-        self.enable_dummy_allreduce = os.environ.get(
+        self.enable_dummy_allreduce = TRTLLMENV.get(
             "TRTLLM_ENABLE_DUMMY_ALLREDUCE", "0") == "1"
         if not self.use_dp and self.mapping.tp_size > 1:
             self.all_reduce = AllReduce(

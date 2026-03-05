@@ -1,5 +1,4 @@
 import copy
-import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -15,6 +14,7 @@ from tensorrt_llm._torch.models.checkpoints.base_weight_mapper import \
     BaseWeightMapper
 from tensorrt_llm._torch.models.checkpoints.hf.llava_next_weight_mapper import \
     LlavaNextHfWeightMapper
+from tensorrt_llm.env_utils import TRTLLMENV
 from tensorrt_llm.inputs.multimodal import MultimodalParams
 
 from ...inputs import (BaseMultimodalDummyInputsBuilder,
@@ -33,7 +33,7 @@ from .modeling_multimodal_utils import (find_input_mm_embeds, fuse_input_embeds,
                                         get_multimodal_embeddings)
 from .modeling_utils import register_auto_model, register_vision_encoder
 
-DISAGG = os.getenv('TLLM_MULTIMODAL_DISAGGREGATED', '0') == '1'
+DISAGG = TRTLLMENV.get('TLLM_MULTIMODAL_DISAGGREGATED', '0') == '1'
 
 
 class LlavaNextInputProcessor(BaseMultimodalInputProcessor,

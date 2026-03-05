@@ -3,6 +3,8 @@ import gc
 import json
 import os
 import signal  # Added import
+
+from tensorrt_llm.env_utils import TRTLLMENV
 import socket
 import subprocess  # nosec B404
 import sys
@@ -223,7 +225,7 @@ def launch_server(
                               chat_template=chat_template)
 
         # Optionally disable GC (default: not disabled)
-        if os.getenv("TRTLLM_SERVER_DISABLE_GC", "0") == "1":
+        if TRTLLMENV.get("TRTLLM_SERVER_DISABLE_GC", "0") == "1":
             gc.disable()
 
         asyncio.run(server(host, port, sockets=[s]))
@@ -718,17 +720,17 @@ def disaggregated(
         #   increment, and observed that `count0` (obtained by `gc.get_count()`)
         #   increases by fewer than 1,000 after every 200,000 requests, while the
         #   maximum value of `count0` exceeded 3,000,000 during the test.
-        if os.getenv("TRTLLM_DISAGG_SERVER_DISABLE_GC", "1") == "1":
+        if TRTLLMENV.get("TRTLLM_DISAGG_SERVER_DISABLE_GC", "1") == "1":
             gc.disable()
 
         asyncio.run(server(disagg_cfg.hostname, disagg_cfg.port, sockets=[s]))
 
 
 def set_cuda_device():
-    if (os.getenv("OMPI_COMM_WORLD_RANK")):
-        env_global_rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
-    elif (os.getenv("SLURM_PROCID")):
-        env_global_rank = int(os.environ["SLURM_PROCID"])
+    if (TRTLLMENV.get("OMPI_COMM_WORLD_RANK")):
+        env_global_rank = int(TRTLLMENV["OMPI_COMM_WORLD_RANK"])
+    elif (TRTLLMENV.get("SLURM_PROCID")):
+        env_global_rank = int(TRTLLMENV["SLURM_PROCID"])
     else:
         raise RuntimeError("Could not determine rank from environment")
     device_id = env_global_rank % device_count()
@@ -752,8 +754,8 @@ def disaggregated_mpi_worker(config_file: Optional[str], log_level: str):
     """Launching disaggregated MPI worker"""
 
     from tensorrt_llm._utils import mpi_rank
-    if os.environ.get(DisaggLauncherEnvs.
-                      TLLM_DISAGG_RUN_REMOTE_MPI_SESSION_CLIENT) != "1":
+    if TRTLLMENV.get(DisaggLauncherEnvs.
+                     TLLM_DISAGG_RUN_REMOTE_MPI_SESSION_CLIENT) != "1":
         set_cuda_device()
     # Importing mpi4py after setting CUDA device. This is needed to war an issue with mpi4py and CUDA
     from mpi4py.futures import MPICommExecutor
@@ -764,9 +766,9 @@ def disaggregated_mpi_worker(config_file: Optional[str], log_level: str):
     disagg_cfg = parse_disagg_config_file(config_file)
 
     # Run a server with the underlying LLM invokes a RemoteMPISessionClient
-    if os.environ.get(DisaggLauncherEnvs.
-                      TLLM_DISAGG_RUN_REMOTE_MPI_SESSION_CLIENT) == "1":
-        instance_idx = os.environ.get(
+    if TRTLLMENV.get(DisaggLauncherEnvs.
+                     TLLM_DISAGG_RUN_REMOTE_MPI_SESSION_CLIENT) == "1":
+        instance_idx = TRTLLMENV.get(
             DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX)
         server_cfg = disagg_cfg.server_configs[int(instance_idx)]
 
@@ -791,7 +793,7 @@ def disaggregated_mpi_worker(config_file: Optional[str], log_level: str):
     # Leader ranks will start the trtllm-server using it's own server config
     # and start a RemoteMPISessionServer to accept MPI tasks
     if is_leader:
-        os.environ[DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX] = str(
+        TRTLLMENV[DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX] = str(
             instance_idx)
         server_cfg = disagg_cfg.server_configs[instance_idx]
 
@@ -817,7 +819,7 @@ class DisaggLauncherEnvs(StrEnum):
 
 def _launch_disaggregated_server(disagg_config_file: str, llm_args: dict):
     # Launching the server
-    instance_idx = os.environ.get(DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX)
+    instance_idx = TRTLLMENV.get(DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX)
     assert instance_idx is not None, f"{DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX} should be set by the launcher"
     disagg_config = parse_disagg_config_file(disagg_config_file)
     server_cfg = disagg_config.server_configs[int(instance_idx)]
@@ -842,15 +844,15 @@ def _launch_disaggregated_leader(sub_comm, instance_idx: int, config_file: str,
     # This mimics the behavior of trtllm-llmapi-launch
     # TODO: Make the port allocation atomic
     free_ipc_addr = find_free_ipc_addr()
-    os.environ[LlmLauncherEnvs.TLLM_SPAWN_PROXY_PROCESS] = "1"
-    os.environ[
+    TRTLLMENV[LlmLauncherEnvs.TLLM_SPAWN_PROXY_PROCESS] = "1"
+    TRTLLMENV[
         LlmLauncherEnvs.TLLM_SPAWN_PROXY_PROCESS_IPC_ADDR.value] = free_ipc_addr
-    os.environ[DisaggLauncherEnvs.TLLM_DISAGG_RUN_REMOTE_MPI_SESSION_CLIENT.
-               value] = "1"
-    os.environ[DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX] = str(instance_idx)
+    TRTLLMENV[DisaggLauncherEnvs.TLLM_DISAGG_RUN_REMOTE_MPI_SESSION_CLIENT.
+              value] = "1"
+    TRTLLMENV[DisaggLauncherEnvs.TLLM_DISAGG_INSTANCE_IDX] = str(instance_idx)
 
     logger.debug(
-        f"proxy controller address: {os.environ[LlmLauncherEnvs.TLLM_SPAWN_PROXY_PROCESS_IPC_ADDR]}"
+        f"proxy controller address: {TRTLLMENV[LlmLauncherEnvs.TLLM_SPAWN_PROXY_PROCESS_IPC_ADDR]}"
     )
 
     # The MPI-related environment variables will invoke duplicate MPI_Init in
