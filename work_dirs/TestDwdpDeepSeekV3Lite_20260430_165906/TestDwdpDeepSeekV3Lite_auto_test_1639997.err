@@ -1,0 +1,7 @@
+0: pyxis: importing docker image: urm.nvidia.com/sw-tensorrt-docker/tensorrt-llm:pytorch-26.02-py3-sbsa-ubuntu24.04-trt10.15.1.29-skip-tritondevel-202604011104-12600
+0: pyxis: imported docker image: urm.nvidia.com/sw-tensorrt-docker/tensorrt-llm:pytorch-26.02-py3-sbsa-ubuntu24.04-trt10.15.1.29-skip-tritondevel-202604011104-12600
+0: Skipping import of cpp extensions due to incompatible torch version 2.11.0a0+eb65b36914.nv26.02 for torchao version 0.15.0             Please see https://github.com/pytorch/ao/issues/2919 for more info
+0: ERROR: found no collectors for /lustre/fsw/coreai_comparch_trtllm/huig/TensorRT-LLM/tests/integration/defs/accuracy/test_dwdp_disaggregated_serving.py::TestDwdpDeepSeekV3Lite::test_dwdp_accuracy
+0: 
+srun: error: lyris0270: task 0: Exited with exit code 4
+srun: Terminating StepId=1639997.1

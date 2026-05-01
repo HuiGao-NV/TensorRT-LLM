@@ -139,19 +139,19 @@ This skill **never parses cluster connection YAML**. It only decides local vs re
 
 ### Step 2.5: Detect SLURM Account and Valid Partitions (slurm scenarios only)
 
-> **MANDATORY before Step 4.** For every `local_slurm` and `remote_slurm` run, this step
-> **must complete successfully** before invoking `trtllm-test-script-builder`. The script
-> builder relies on `account`, `partition`, and the validated `slurm_env` already being
-> present in `job_spec.json` — it must not be invoked with caller-supplied / default
-> values that haven't been verified against the cluster.
->
-> **Do NOT skip Step 2.5 just because case-executor is running on a host that cannot
-> SSH directly** (e.g., a macOS dev box). In that case use **Option A (delegation)** below
-> — dispatch a `trtllm-remote-slurm-executor` preflight subagent that performs the SSH
-> and runs the script over it. Skipping detection and falling back to defaults is
-> forbidden — defaults can produce a script that submits to a non-existent partition
-> or an account the user has no association with, which only fails after the SLURM
-> queue accepts it.
+**MANDATORY before Step 4.** For every `local_slurm` and `remote_slurm` run, this step
+**must complete successfully** before invoking `trtllm-test-script-builder`. The script
+builder relies on `account`, `partition`, and the validated `slurm_env` already being
+present in `job_spec.json` — it must not be invoked with caller-supplied / default
+values that haven't been verified against the cluster.
+
+**Do NOT skip Step 2.5 just because case-executor is running on a host that cannot
+SSH directly**. In that case use **Option A (delegation)** below
+— dispatch a `trtllm-remote-slurm-executor` preflight subagent that performs the SSH
+and runs the script over it. Skipping detection and falling back to defaults is
+forbidden — defaults can produce a script that submits to a non-existent partition
+or an account the user has no association with, which only fails after the SLURM
+queue accepts it.
 
 For `local_slurm` and `remote_slurm`, run `scripts/detect_slurm_env.sh` to populate `account` and the list of valid partitions for the current user. **Skip this step entirely for `local_docker` and `local_direct`** — they don't use SLURM.
 
@@ -378,8 +378,6 @@ Relay the subagent result to the user with: task type, Docker image, command/scr
 | Skill | Role | Step |
 |-------|------|------|
 | `trtllm-env-check` | Detect GPUs + Slurm availability | 2 |
-| `exec-local-compile` | Build TRT-LLM from source on local compute node | 3 |
-| `exec-slurm-compile` | Build TRT-LLM from source via SLURM job | 3 |
 | `trtllm-test-script-builder` | Resolve params + generate script + `job_spec.json` | 4 |
 | `trtllm-local-docker-executor` | Local Docker execution | 5 |
 | `trtllm-local-slurm-executor` | Local Slurm submission + monitoring | 5 |
