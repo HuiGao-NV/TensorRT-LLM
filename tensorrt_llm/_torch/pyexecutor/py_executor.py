@@ -4507,6 +4507,62 @@ class PyExecutor:
         if wait_for_input_copy is not None:
             wait_for_input_copy()
 
+    def _schedule_ctx_only_overlap_iter(
+            self, scheduled_batch: ScheduledRequests,
+            iter_stats: IterationStats, iter_start_time: float) -> None:
+        """Handle one overlap-scheduler iteration for a context-only batch.
+
+        Unlike the main overlap loop, which defers token decoding and KV
+        transfer to the *next* iteration via ``self.previous_batch``, this
+        method schedules, forwards, samples, and initiates the KV transfer
+        for the supplied context-only batch all within the same iteration.
+        ``self.previous_batch`` is never read or written.
+        """
+        can_queue, can_queue_this_rank = self._can_queue(scheduled_batch)
+        if not can_queue:
+            self._revert_gen_alloc(scheduled_batch)
+            self._finalize_adp_dummy_allocation(False)
+            return
+
+        self.resource_manager.prepare_resources(scheduled_batch)
+        self._finalize_adp_dummy_allocation(True)
+
+        batch_outputs = self._forward_step(scheduled_batch)
+        sample_state = self._sample_async(scheduled_batch, batch_outputs)
+
+        self._wait_for_model_engine_input_copy()
+        self._update_request_states(scheduled_batch)
+        if self._is_kv_manager_v2 and scheduled_batch.context_requests:
+            self.kv_cache_manager.update_context_resources(scheduled_batch)
+
+        # Must synchronize before _update_requests consumes the sampled tokens.
+        sample_state.sampler_event.synchronize()
+        self._update_requests(sample_state)
+
+        # Initiate KV transfer immediately — no one-iteration lag.
+        self._send_kv_async(scheduled_batch.all_requests())
+
+        self._commit_kv_cache_stats(scheduled_batch)
+        self._wait_for_model_engine_input_copy()
+        self._handle_canceled_requests()
+        finished_requests = self._handle_responses()
+        attn_metadata = getattr(self.model_engine, 'attn_metadata', None)
+        kv_cache_dtype_byte_size = getattr(self.model_engine,
+                                           'kv_cache_dtype_byte_size', None)
+        self.resource_manager.update_resources(scheduled_batch, attn_metadata,
+                                               kv_cache_dtype_byte_size)
+        if self.enable_kv_cache_events:
+            self._add_kv_cache_events()
+        if self.enable_iter_perf_stats:
+            batch_state = BatchState(
+                scheduled_requests=scheduled_batch,
+                sample_state=sample_state,
+                iter_start_time=iter_start_time,
+                iter_stats=iter_stats,
+            )
+            self._process_iter_stats(finished_requests, self.active_requests,
+                                     batch_state)
+
     def _executor_loop_overlap(self):
         torch.cuda.set_device(self.device_id)
         # ensure the context is created, otherwise, some MPI calls will fail.
