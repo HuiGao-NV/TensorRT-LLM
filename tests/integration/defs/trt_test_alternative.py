@@ -237,7 +237,8 @@ if is_linux():
                     return True
         return False
 
-    def kill_orphaned_gpu_processes(launch_token: str):
+    def kill_orphaned_gpu_processes(launch_token: str,
+                                    include_descendants: bool = False):
         """Kill GPU processes of one launch that escaped its process tree.
 
         When pytest-timeout fires with --timeout-method=thread it calls
@@ -248,6 +249,10 @@ if is_linux():
         an NVIDIA device node open, and it or one of its ancestors carries
         ``launch_token``; processes of other jobs on the node, or host pids
         that alias them in a container, never carry the token.
+
+        Descendants of the calling process are skipped unless
+        ``include_descendants`` is set, which is for callers that know nothing
+        of the launch should still be running, such as the end of a session.
         """
         me = os.getpid()
         current_uid = os.getuid()
@@ -259,7 +264,8 @@ if is_linux():
                 proc = psutil.Process(pid)
                 if proc.uids().real != current_uid:
                     continue
-                if me in (parent.pid for parent in proc.parents()):
+                if not include_descendants and me in (
+                        parent.pid for parent in proc.parents()):
                     continue  # already covered by the descendant sweep
                 if not _holds_gpu(pid) or not _has_launch_token(
                         proc, launch_token):
@@ -361,6 +367,10 @@ elif is_windows():
     def tag_launch(kwargs: dict):
         """No launch token on Windows; processes are tracked by a job object."""
         return kwargs, None
+
+    def kill_orphaned_gpu_processes(launch_token: str,
+                                    include_descendants: bool = False):
+        """No-op on Windows; processes are tracked by a job object."""
 
     class MyHandle:
 

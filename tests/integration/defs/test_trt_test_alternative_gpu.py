@@ -27,6 +27,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 import torch
@@ -171,3 +172,19 @@ def test_sweep_keeps_cuda_process_of_another_launch(scripts, tmp_path, cleanup_p
     tta.kill_orphaned_gpu_processes(token)
 
     assert _is_alive(pid)
+
+
+def test_wrapper_kills_cuda_process_left_after_the_command_exits(scripts, tmp_path, cleanup_pids):
+    """What CI relies on when pytest-timeout ends pytest with ``os._exit()``."""
+    ready = tmp_path / "ready"
+    wrapper = Path(__file__).parent / "utils" / "run_with_gpu_orphan_sweep.py"
+
+    result = subprocess.run(
+        [sys.executable, str(wrapper), "--"] + _launcher_cmd(scripts, ready, 1),
+        timeout=_RUN_TIMEOUT_S,
+    )
+
+    assert result.returncode == 1
+    pid = _read_pid(ready)
+    cleanup_pids.append(pid)
+    assert _wait_gone(pid)

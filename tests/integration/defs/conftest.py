@@ -56,9 +56,11 @@ from .perf.session_data_writer import SessionDataWriter
 from .test_list_parser import (TestCorrectionMode, apply_waives,
                                get_test_name_corrections_v2, handle_corrections,
                                modify_by_test_list, preprocess_test_list_lines)
+from . import trt_test_alternative
 from .trt_test_alternative import (call, check_output, exists, is_windows,
                                    is_wsl, makedirs, print_info, print_warning,
                                    wsl_to_win_path)
+from .utils.gpu_orphan_sweep_plugin import GpuOrphanSweep
 from .utils.periodic_junit import PeriodicJUnitXML
 
 try:
@@ -1680,6 +1682,12 @@ def pytest_configure(config):
     # unfinished_test.txt and races out cleanup entries.
     if hasattr(config, "workerinput"):
         return
+
+    # Workers inherit the session's launch token, so the controller alone
+    # tags the session and sweeps what its tests left on the GPU.
+    gpu_orphan_sweep = GpuOrphanSweep(trt_test_alternative)
+    gpu_orphan_sweep.start()
+    config.pluginmanager.register(gpu_orphan_sweep, "gpu_orphan_sweep")
 
     # Initialize PeriodicJUnitXML reporter if enabled
     periodic = config.getoption("--periodic-junit", default=False)

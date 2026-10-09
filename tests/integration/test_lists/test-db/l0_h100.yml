@@ -239,6 +239,7 @@ l0_h100:
   - test_trt_test_alternative_gpu.py::test_failed_launch_kills_orphaned_cuda_process
   - test_trt_test_alternative_gpu.py::test_successful_launch_keeps_cuda_process
   - test_trt_test_alternative_gpu.py::test_sweep_keeps_cuda_process_of_another_launch
+  - test_trt_test_alternative_gpu.py::test_wrapper_kills_cuda_process_left_after_the_command_exits
 - condition:
     ranges:
       system_gpu_count:

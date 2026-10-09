@@ -85,6 +85,14 @@ POD_TIMEOUT_SECONDS_TEST = env.podTimeoutSeconds ? env.podTimeoutSeconds : "2160
 POD_TIMEOUT_SECONDS_BUILD = env.podTimeoutSeconds ? env.podTimeoutSeconds : "43200"
 POD_TIMEOUT_SECONDS_SLURM = env.podTimeoutSeconds ? env.podTimeoutSeconds : "79200"  // Use 22 hours to allow for 2 hour of buffer.
 
+// Run each stage's pytest through run_with_gpu_orphan_sweep.py, which outlives pytest
+// and kills the GPU processes it leaves behind. pytest-timeout's thread method ends
+// pytest with os._exit(), so its MPI workers are never shut down and keep their GPU
+// memory for the following tests. Set the TRTLLM_TEST_GPU_ORPHAN_SWEEP=0 environment
+// variable to turn the sweep off without changing the pipeline.
+@Field
+def ENABLE_GPU_ORPHAN_SWEEP = true
+
 // Literals for easier access.
 @Field
 def TARNAME = "tarName"
@@ -1692,6 +1700,13 @@ def getPytestBaseCommandLine(
         jUnitLogging = "all"
     }
 
+    // The wrapper takes the command's place after the environment assignments, so it
+    // is the outermost process of pytest and survives it. CPU stages hold no GPU.
+    def gpuOrphanSweepWrapper = ""
+    if (ENABLE_GPU_ORPHAN_SWEEP && !stageName.startsWith("CPU-")) {
+        gpuOrphanSweepWrapper = "python3 ${llmSrc}/tests/integration/defs/utils/run_with_gpu_orphan_sweep.py --"
+    }
+
     def testCmdLine = [
         "LLM_ROOT=${llmSrc}",
         "LLM_BACKEND_ROOT=${llmSrc}/triton_backend",
@@ -1700,6 +1715,7 @@ def getPytestBaseCommandLine(
         "COLUMNS=300",
         extraInternalEnv,
         portEnvVars,
+        gpuOrphanSweepWrapper,
         pytestUtil,
         "pytest",
         "-vv",
