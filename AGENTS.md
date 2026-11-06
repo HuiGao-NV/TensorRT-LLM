@@ -190,9 +190,9 @@ See [CI overview](docs/source/developer-guide/ci-overview.md) for full details.
 | Test waives | `tests/integration/test_lists/waives.txt` | Skip known-failing tests with NVBug links |
 | Performance | See [benchmarking guide](docs/source/developer-guide/perf-benchmarking.md) | `trtllm-bench` and `trtllm-serve` benchmarks |
 
-Pass product Python file paths to `scripts/run_pyrefly.sh` for a file-list static
-check; pre-commit supplies these paths with `pass_filenames: true`. If none are
-eligible, the script scans all product Python files. `--full-project` requests
+Pass product or test Python file paths to `scripts/run_pyrefly.sh` for a file-list
+static check; pre-commit supplies these paths with `pass_filenames: true`. If none are
+eligible, the script scans all configured Python files. `--full-project` requests
 that scan explicitly. For supplied files, diagnostics are filtered to added
 and modified lines when Git provides them and retained at file level otherwise.
 Jenkins runs a full-project check with path/module and symbol exclusions.

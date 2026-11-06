@@ -841,9 +841,9 @@ max-args = 10
 
 
 [tool.pyrefly]
-# Keep the existing diagnostic scope while adopting Pyrefly's error names.
+# Check product and test sources with the selected diagnostic categories.
 preset = "off"
-project-includes = ["tensorrt_llm"]
+project-includes = ["tensorrt_llm", "tests"]
 # Shared by Pyrefly project checks and the changed-file/report filters.
 project-excludes = [
     "tensorrt_llm/_torch/kernels/**",
